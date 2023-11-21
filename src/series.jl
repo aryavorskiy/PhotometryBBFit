@@ -29,7 +29,10 @@ function read_series(file; dlm=',')
             (tags_and_series[tag] = Series())
         insert_measurement!(tags_and_series[tag], time, mag, err)
     end
-    return tags_and_series
+    tags = collect(keys(tags_and_series))
+    sers = collect(values(tags_and_series))
+    sp = sortperm(tags)
+    return tags[sp], sers[sp]
 end
 
 struct SeriesPoint{T}
@@ -44,6 +47,15 @@ end
 function chi2(sp::SeriesPoint, (R, T))
     re = resid2(sp, (R, T))
     return sum(@. re / sp.errs^2)
+end
+const REPORT_3σ = ("out of 3σ", "in 3σ")
+function summary(sp::SeriesPoint, (R, T))
+    println("Chi² = $(chi2(sp, (R, T)))")
+    m = planck_model(sp, (R, T))
+    for i in eachindex(sp.filters)
+        println("""$(sp.filters[i].id) (#$i): value $(sp.mags[i]), error $(sp.errs[i])
+        Modelled $(m[i]), $(REPORT_3σ[(abs(sp.mags[i] - m[i]) < 3 * sp.errs[i]) + 1])""")
+    end
 end
 
 # Unit conversion
@@ -87,9 +99,9 @@ end
 
 find_filter(f::Function, tag::String) = f(tag)
 function read_series_filterdata(callback, file; unit=Luminosity())
-    rser = read_series(file)
-    filters = [find_filter(callback, tag) for (tag, ser) in rser]
-    sers = [to_luminosity(unit, ser) for (tag, ser) in rser]
+    tags, n_sers = read_series(file)
+    filters = [find_filter(callback, tag) for tag in tags]
+    sers = [to_luminosity(unit, ser) for ser in n_sers]
     notfound_mask = filters .=== nothing
     if any(notfound_mask)
         @warn """some filter tags were not resolved:
