@@ -1,0 +1,4 @@
+[deps]
+AffineInvariantMCMC = "a0f608ac-68d0-5108-ad9a-0cdca73324f3"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
