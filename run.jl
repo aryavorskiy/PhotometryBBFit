@@ -4,18 +4,11 @@ import UnitfulAstro: ly
 
 ser = read_series_filterdata("data_13dqy_formatted_for_package.txt", unit=Flux(16e10ly)) do filter
     if isfile("Filters/$filter.txt")
-        return read_filter("Filters/$filter.txt", dlm=',')
+        return read_filter("Filters/$filter.txt")
     elseif isfile("Filters/$filter.rtf")
         return read_filter("Filters/$filter.rtf")
     else
-        filter = "Swift_$filter"
-        if isfile("Filters/$filter.txt")
-            return read_filter("Filters/$filter.txt", dlm=',')
-        elseif isfile("Filters/$filter.rtf")
-            return read_filter("Filters/$filter.rtf")
-        else
-            return nothing
-        end
+        return nothing
     end
 end
 

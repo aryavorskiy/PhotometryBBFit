@@ -38,7 +38,6 @@ function download_filter(id::String)
     file = tempname()
     Downloads.download("http://svo2.cab.inta-csic.es/theory/fps/getdata.php?format=ascii&id=$id", file)
     filter = read_filter(file)
-    length(filter.wavelength) == 0 && @warn "Download failed, check filter ID"
     rm(file)
     return filter
 end
@@ -48,14 +47,15 @@ end
 
 Reads filter info from `file` in tab-separated format. Returns a `Filter`.
 """
-function read_filter(file; dlm=isspace)
+function read_filter(file)
     wavelength = Float64[]
     transparency = Float64[]
     for line in eachline(file)
-        wl, ts = parse.(Float64, split(line, dlm))
+        wl, ts = parse.(Float64, split(line, r"\s+|,\s*"))
         push!(wavelength, wl)
         push!(transparency, ts)
     end
+    length(wavelength) == 0 && @warn "Empty filter data in filename `$file`"
     return Filter{Float64}(wavelength, transparency)
 end
 
@@ -66,5 +66,5 @@ const kb = 1.38e-16
 
 planck_f(λ, T) = (2h * c^2 * 1e40) / λ^5 / (exp((h * c * 1e8 / kb) / λ / T) - 1)
 function planck_model(filter::Filter, (R, T))
-    return sum(@. filter.wavelength_weights * planck_f(filter.wavelength, T) * filter.transparency * 4pi * R^2)
+    return sum(@. filter.wavelength_weights * planck_f(filter.wavelength, T) * filter.transparency) * 4pi * R^2
 end

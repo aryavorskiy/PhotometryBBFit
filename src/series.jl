@@ -48,6 +48,7 @@ end
 
 # Unit conversion
 
+import UnitfulAstro
 import UnitfulAstro: cm
 abstract type LightnessUnit end
 struct Luminosity <: LightnessUnit end
@@ -64,12 +65,12 @@ converts all units to luminosity
 """
 to_luminosity(::Luminosity, val, err) = val, err
 function to_luminosity(unit::Flux, val, err)
-    return (val, err) .* (4pi * upreferred(unit.dist^2 / unit.area))
+    return (val, err) .* (4pi * UnitfulAstro.Unitful.upreferred(unit.dist^2 / unit.area))
 end
 function to_luminosity(unit, ser::Series)
     new_ser = Series(ser.time, similar(ser.mag), similar(ser.err))
     for i in eachindex(ser.time)
-        new_ser.mag[i], new_ser.err[i] = to_luminosity(unit, ser.val[i], ser.err[i])
+        new_ser.mag[i], new_ser.err[i] = to_luminosity(unit, ser.mag[i], ser.err[i])
     end
     return new_ser
 end
@@ -87,7 +88,6 @@ end
 find_filter(f::Function, tag::String) = f(tag)
 function read_series_filterdata(callback, file; unit=Luminosity())
     rser = read_series(file)
-
     filters = [find_filter(callback, tag) for (tag, ser) in rser]
     sers = [to_luminosity(unit, ser) for (tag, ser) in rser]
     notfound_mask = filters .=== nothing
