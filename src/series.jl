@@ -40,21 +40,23 @@ struct SeriesPoint{T}
     mags::Vector{T}
     errs::Vector{T}
 end
-planck_model(sp::SeriesPoint, (R, T)) = [planck_model(filter, (R, T)) for filter in sp.filters]
-function resid2(sp::SeriesPoint, (R, T))
-    return abs2.(sp.mags .- planck_model(sp, (R, T)))
+function filter_reading(spectrum, pt::SeriesPoint)
+    return filter_reading.(Ref(spectrum), pt.filters)
 end
-function chi2(sp::SeriesPoint, (R, T))
-    re = resid2(sp, (R, T))
-    return sum(@. re / sp.errs^2)
+function resid2(spectrum, pt::SeriesPoint)
+    return abs2.(pt.mags .- filter_reading(spectrum, pt))
+end
+function chi2(spectrum, pt::SeriesPoint)
+    re = resid2(spectrum, pt)
+    return sum(@. re / pt.errs^2)
 end
 const REPORT_3σ = ("out of 3σ", "in 3σ")
-function summary(sp::SeriesPoint, (R, T))
-    println("Chi² = $(chi2(sp, (R, T)))")
-    m = planck_model(sp, (R, T))
-    for i in eachindex(sp.filters)
-        println("""$(sp.filters[i].id) (#$i): value $(sp.mags[i]), error $(sp.errs[i])
-        Modelled $(m[i]), $(REPORT_3σ[(abs(sp.mags[i] - m[i]) < 3 * sp.errs[i]) + 1])""")
+function summary(spectrum, pt::SeriesPoint)
+    println("χ² = $(chi2(spectrum, pt))")
+    m = filter_reading(spectrum, pt)
+    for i in eachindex(pt.filters)
+        println("""$(pt.filters[i].id) (#$i): value $(pt.mags[i]), error $(pt.errs[i])
+        Modelled $(m[i]), ratio $(m[i] / pt.mags[i]), $(REPORT_3σ[(abs(pt.mags[i] - m[i]) < 3 * pt.errs[i]) + 1])""")
     end
 end
 

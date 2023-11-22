@@ -1,23 +1,28 @@
 struct Filter{T}
     wavelength::Vector{T}
     wavelength_weights::Vector{T}
-    transparency::Vector{T}
+    transmission::Vector{T}
+    norm_const::Float64
+    mode::Symbol
     id::String
-    function Filter{T}(wavelength::Vector{T}, transparency::Vector{T}, id="") where T
-        @assert length(wavelength) == length(transparency)
+    function Filter{T}(wavelength::Vector{T}, transmission::Vector{T}, mode::Symbol=:photon, id="") where T
+        @assert length(wavelength) == length(transmission)
+        @assert mode in (:photon, :energy) "unsupported mode `$mode`"
         wavelength_weights = zero(wavelength)
         wavelength_weights[1:end-1] += diff(wavelength)
         wavelength_weights[2:end] += diff(wavelength)
         wavelength_weights /= 2
-        return new{T}(wavelength, wavelength_weights, transparency, id)
+        norm_const = mode == :energy ?
+        sum(@. wavelength_weights * transmission) :
+        sum(@. wavelength_weights * wavelength * transmission) * (1e-8 / 2pi / c)
+        return new{T}(wavelength, wavelength_weights, transmission, norm_const, mode, id)
     end
 end
 
-
 function Base.write(io::IO, filter::Filter{T}) where T
-    write(io, length(filter.transparency)) +
+    write(io, length(filter.transmission)) +
     write(io, filter.wavelength) +
-    write(io, filter.transparency)
+    write(io, filter.transmission)
 end
 
 function Base.read(io::IO, ::Type{Filter{T}}) where T
@@ -36,10 +41,10 @@ using Downloads, Logging
 
 Download filter info from svo2.cab.inta-csic.es website. Returns a `Filter`.
 """
-function download_filter(id::String)
+function download_filter(id::String, mode=:photon)
     file = tempname()
     Downloads.download("http://svo2.cab.inta-csic.es/theory/fps/getdata.php?format=ascii&id=$id", file)
-    filter = read_filter(file, id)
+    filter = read_filter(file, mode, id)
     rm(file)
     return filter
 end
@@ -49,7 +54,7 @@ end
 
 Reads filter info from `file` in tab-separated format. Returns a `Filter`.
 """
-function read_filter(file, id=file)
+function read_filter(file, mode=:photon, id=file)
     wavelength = Float64[]
     transparency = Float64[]
     for line in eachline(file)
@@ -58,15 +63,14 @@ function read_filter(file, id=file)
         push!(transparency, ts)
     end
     length(wavelength) == 0 && @warn "Empty filter data in filename `$file`"
-    return Filter{Float64}(wavelength, transparency, id)
+    return Filter{Float64}(wavelength, transparency, mode, id)
 end
 
-# cgs units
 const c = 3e10
-const h = 6.626e-27
-const kb = 1.38e-16
-
-planck_f(λ, T) = (2h * c^2 * 1e40) / λ^5 / (exp((h * c * 1e8 / kb) / λ / T) - 1) * 1e-8
-function planck_model(filter::Filter, (R, T))
-    return sum(@. filter.wavelength_weights * planck_f(filter.wavelength, T) * filter.transparency) * 4pi * R^2
+function filter_reading(spectrum, filter::Filter)
+    if filter.mode == :energy
+        return sum(@. filter.wavelength_weights * spectrum(filter.wavelength) * filter.transmission) / filter.norm_const
+    elseif filter.mode == :photon
+        return sum(@. filter.wavelength_weights * spectrum(filter.wavelength) * filter.transmission * filter.wavelength * (1e-8 / 2pi / c)) / filter.norm_const
+    end
 end
