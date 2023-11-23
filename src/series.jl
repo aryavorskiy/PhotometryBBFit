@@ -12,12 +12,16 @@ function insert_measurement!(ms::Series, ind, val, err)
 end
 
 function (ser::Series)(time)
-    i = findfirst(>(time), ser.time)
-    i in (1, nothing) && error("timestamp out of bounds!")
+    checkbounds(Bool, ser, time) || error("timestamp out of bounds!")
+    i = findfirst(≥(time), ser.time)
+    i === nothing && error("timestamp $time out of bounds $(extrema(ser.time))!")
+    i == 1 && return ser.mag[1], ser.err[1]
     lw = (time - ser.time[i-1]) / (ser.time[i] - ser.time[i-1])
     return (ser.mag[i-1] * lw + ser.mag[i] * (1 - lw),
     √(ser.err[i-1]^2 * lw + ser.err[i]^2 * (1 - lw)))
 end
+
+Base.checkbounds(::Type{Bool}, ser::Series, time) = ser.time[begin] ≤ time ≤ ser.time[end]
 
 function read_series(file; dlm=',')
     tags_and_series = Dict{String, Series{Float64}}()
@@ -41,14 +45,11 @@ struct SeriesPoint{T}
     errs::Vector{T}
 end
 function filter_reading(spectrum, pt::SeriesPoint)
-    return filter_reading.(Ref(spectrum), pt.filters)
-end
-function resid2(spectrum, pt::SeriesPoint)
-    return abs2.(pt.mags .- filter_reading(spectrum, pt))
+    return [filter_reading(spectrum, f) for f in pt.filters]
 end
 function chi2(spectrum, pt::SeriesPoint)
-    re = resid2(spectrum, pt)
-    return sum(@. re / pt.errs^2)
+    return sum(((y1, y2, err),) -> (y1 - y2)^2 / err^2,
+        zip(pt.mags, filter_reading(spectrum, pt), pt.errs))
 end
 const REPORT_3σ = ("out of 3σ", "in 3σ")
 function summary(spectrum, pt::SeriesPoint)
@@ -94,9 +95,19 @@ struct SeriesFilterdata{T}
     sers::Vector{Series{T}}
 end
 function (sfd::SeriesFilterdata)(time)
-    return SeriesPoint(sfd.filters,
-    [ser(time)[1] for ser in sfd.sers],
-    [ser(time)[2] for ser in sfd.sers])
+    mask = checkbounds.(Bool, sfd.sers, time)
+    return SeriesPoint(sfd.filters[mask],
+    [ser(time)[1] for ser in sfd.sers[mask]],
+    [ser(time)[2] for ser in sfd.sers[mask]])
+end
+function time_domain(sfd::SeriesFilterdata; tol=1e-8)
+    ts = Float64[]
+    for ser in sfd.sers
+        for t in ser.time
+            any(tt -> isapprox(t, tt, atol=tol), ts) || push!(ts, t)
+        end
+    end
+    return sort(ts)
 end
 
 find_filter(f::Function, tag::String) = f(tag)

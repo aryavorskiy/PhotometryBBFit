@@ -1,3 +1,5 @@
+import Base.Broadcast: broadcasted
+
 struct Filter{T}
     wavelength::Vector{T}
     wavelength_weights::Vector{T}
@@ -69,8 +71,8 @@ end
 const c = 3e10
 function filter_reading(spectrum, filter::Filter)
     if filter.mode == :energy
-        return sum(@. filter.wavelength_weights * spectrum(filter.wavelength) * filter.transmission) / filter.norm_const
+        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) / filter.norm_const
     elseif filter.mode == :photon
-        return sum(@. filter.wavelength_weights * spectrum(filter.wavelength) * filter.transmission * filter.wavelength * (1e-8 / 2pi / c)) / filter.norm_const
+        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) * (1e-8 / 2pi / c) / filter.norm_const
     end
 end
