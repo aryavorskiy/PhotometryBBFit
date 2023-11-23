@@ -16,7 +16,7 @@ struct Filter{T}
         wavelength_weights /= 2
         norm_const = mode == :energy ?
         sum(@. wavelength_weights * transmission) :
-        sum(@. wavelength_weights * wavelength * transmission) * (1e-8 / 2pi / c)
+        sum(@. wavelength_weights * wavelength * transmission)
         return new{T}(wavelength, wavelength_weights, transmission, norm_const, mode, id)
     end
 end
@@ -71,8 +71,8 @@ end
 const c = 3e10
 function filter_reading(spectrum, filter::Filter)
     if filter.mode == :energy
-        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) / filter.norm_const
+        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission)) / filter.norm_const
     elseif filter.mode == :photon
-        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) * (1e-8 / 2pi / c) / filter.norm_const
+        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) / filter.norm_const
     end
 end

@@ -8,6 +8,7 @@ max_constraints(any, i) = max_constraints(any)[i]
 nparams(model) = length(sparams(model))
 
 spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)
+split_spectrum(spectrum::PlanckSpectrum) = PlanckModel(), (spectrum.R, spectrum.T)
 
 using LinearAlgebra
 
