@@ -2,24 +2,20 @@
 const h = 6.626e-27
 const kb = 1.38e-16
 
-struct PlanckModel
+struct PlanckSpectrum
     R::Float64
     T::Float64
 end
 
+Base.iterate(spectrum::PlanckSpectrum) = spectrum.R, Val(:T)
+Base.iterate(spectrum::PlanckSpectrum, ::Val{:T}) = spectrum.T, Val(:End)
+Base.iterate(::PlanckSpectrum, ::Val{:End}) = nothing
 
-(pm::PlanckModel)(λ) =
-    (2h * c^2 * 1e40) / λ^5 / (exp((h * c * 1e8 / kb) / λ / pm.T) - 1) * 1e-8 * 4pi * pm.R^2
-function planck_model(filter::Filter, (R, T))
-
+(spectrum::PlanckSpectrum)(λ) =
+    (2h * c^2 * 1e40) / λ^5 / (exp((h * c * 1e8 / kb) / λ / spectrum.T) - 1) * 1e-8 * 4pi * spectrum.R^2
+@inline function gradient(spectrum::PlanckSpectrum, λ)
+    orig = spectrum(λ)
+    ex = exp((h * c * 1e8 / kb) / λ / spectrum.T)
+    return (orig * 2 / spectrum.R,
+    orig / (ex - 1) * ex * (h * c * 1e8 / kb) / λ / spectrum.T^2)
 end
-
-planck_df(λ, T) = -(2h^2 * c^3 * 1e48) / λ^6 / (exp((h * c * 1e8 / kb) / λ / T) - 1)^2 * exp((h * c * 1e8 / kb) / λ / T) / kb / T^2
-function planck_model(filter::Filter, (R, T), ::Val{:R})
-    return sum(@. filter.wavelength_weights * planck_f(filter.wavelength, T) * filter.transmission) * 8pi * R
-end
-function planck_model(filter::Filter, (R, T), ::Val{:T})
-    return sum(@. filter.wavelength_weights * planck_df(filter.wavelength, T) * filter.transmission) * 4pi * R^2
-end
-
-planck_model(sp::SeriesPoint, (R, T)) = [planck_model(filter, (R, T)) for filter in sp.filters]
