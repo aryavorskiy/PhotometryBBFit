@@ -47,8 +47,13 @@ end
 function filter_reading(spectrum, pt::SeriesPoint)
     return [filter_reading(spectrum, f) for f in pt.filters]
 end
+function filter_reading!(buffer, spectrum, pt::SeriesPoint)
+    for (i, f) in enumerate(pt.filters)
+        buffer[i] = filter_reading(spectrum, f)
+    end
+end
 function chi2(spectrum, pt::SeriesPoint)
-    return sum(((y1, y2, err),) -> (y1 - y2)^2 / err^2,
+    return sum(((y1, y2, err),) -> ((y1 - y2) / err)^2,
         zip(pt.mags, filter_reading(spectrum, pt), pt.errs))
 end
 const REPORT_3σ = ("out of 3σ", "in 3σ")

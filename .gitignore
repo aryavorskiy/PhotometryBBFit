@@ -1,4 +1,6 @@
 Filters/
-Filters.zip
-.vscode/
-data_*_old.*
+.*/
+*old*
+*.png
+*.zip
+*.gz

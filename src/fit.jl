@@ -8,13 +8,12 @@ max_constraints(any, i) = max_constraints(any)[i]
 nparams(model) = length(sparams(model))
 
 spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)
-split_spectrum(spectrum::PlanckSpectrum) = PlanckModel(), (spectrum.R, spectrum.T)
+split_spectrum(spectrum::PlanckSpectrum) = BlackBodyModel(), (spectrum.R, spectrum.T)
 
 using LinearAlgebra
 
 function jacobian(spectrum, filter::Filter)
-    return filter_reading(l -> gradient(spectrum, l)[1], filter),
-        filter_reading(l -> gradient(spectrum, l)[2], filter)
+    return filter_reading(l -> gradient(spectrum, l), filter)
 end
 function jacobian!(J, spectrum, pt::SeriesPoint)
     for i in eachindex(pt.filters)
@@ -26,6 +25,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
     J = zeros(nparams(model), length(pt.filters))
     β = collect(sparams(model))
     M = zeros(nparams(model), nparams(model))
+    fr = zeros(length(pt.filters))
     rhs = zero(β)
     newβ = zero(β)
     function step!(β, lambda)
@@ -34,7 +34,8 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
         for i in 1:nparams(model)
             M[i, i] += lambda
         end
-        mul!(rhs, J, (pt.mags - filter_reading(spectrum(model, β), pt)) ./ pt.errs)
+        filter_reading!(fr, spectrum(model, β), pt)
+        mul!(rhs, J, (pt.mags - fr) ./ pt.errs)
         verbose > 2 && begin
             @show M
             @show J
@@ -50,9 +51,11 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
     end
 
     jacobian!(J, spectrum(model, β), pt)
-    λ = maximum(abs, J)^2 / 1e3
+    λ = maximum(abs, J)^2 * 1e-3
     old_chi2 = chi2(spectrum(model, β), pt)
-    new_chi2 = chi2(spectrum(model, step!(β, λ)), pt)
+    step!(β, λ)
+    new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
+    chi2(spectrum(model, step!(β, λ)), pt)
 
     # while new_chi2 > old_chi2
     #     λ *= 5
@@ -60,9 +63,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
     # end
 
     for i in 1:maxiter
-        step!(β, λ)
         verbose > 1 && (println("iteration #$i:"); @show β)
-        new_chi2 = chi2(spectrum(model, newβ), pt)
         if new_chi2 < old_chi2
             λ *= 1.5
         elseif λ > eps()
@@ -77,6 +78,8 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
             verbose > 0 && @info "Converged after $i iterations with χ² = $(new_chi2)"
             return spectrum(model, β), new_chi2
         end
+        step!(β, λ)
+        new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
     end
     error("Did not converge!")
 end
