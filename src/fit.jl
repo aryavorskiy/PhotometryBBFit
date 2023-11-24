@@ -25,7 +25,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
     J = zeros(nparams(model), length(pt.filters))
     β = collect(sparams(model))
     M = zeros(nparams(model), nparams(model))
-    fr = zeros(length(pt.filters))
+    fr = filter_reading(spectrum(model, β), pt)
     rhs = zero(β)
     newβ = zero(β)
     function step!(β, lambda)
@@ -34,7 +34,6 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
         for i in 1:nparams(model)
             M[i, i] += lambda
         end
-        filter_reading!(fr, spectrum(model, β), pt)
         mul!(rhs, J, (pt.mags - fr) ./ pt.errs)
         verbose > 2 && begin
             @show M
@@ -47,6 +46,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
         for i in 1:nparams(model)
             newβ[i] = min(max(β[i] + newβ[i], min_constraints(model, i)), max_constraints(model, i))
         end
+        filter_reading!(fr, spectrum(model, newβ), pt)
         return newβ
     end
 
@@ -57,27 +57,23 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
     new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
     chi2(spectrum(model, step!(β, λ)), pt)
 
-    # while new_chi2 > old_chi2
-    #     λ *= 5
-    #     new_chi2 = chi2(spectrum(model, step!(β, λ)), pt)
-    # end
-
     for i in 1:maxiter
         verbose > 1 && (println("iteration #$i:"); @show β)
         if new_chi2 < old_chi2
             λ *= 1.5
         elseif λ > eps()
-            λ /= 5
+            λ *= 0.2
         end
         old_chi2 = new_chi2
         verbose > 1 && (@show newβ; @show new_chi2; println())
 
         d = sum(@. abs(β - newβ) / max(β, 1))
-        β, newβ = newβ, β
         if d < tol && i > 10
             verbose > 0 && @info "Converged after $i iterations with χ² = $(new_chi2)"
-            return spectrum(model, β), new_chi2
+            return spectrum(model, newβ), new_chi2
         end
+
+        β, newβ = newβ, β
         step!(β, λ)
         new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
     end
