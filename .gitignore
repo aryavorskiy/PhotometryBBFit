@@ -1,4 +1,5 @@
 Filters/
+Manifest.toml
 .*/
 *old*
 *.png
