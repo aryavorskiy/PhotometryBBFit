@@ -13,13 +13,15 @@ ser = read_series_filterdata("data_13dqy_formatted_for_package.txt", unit=Flux(1
     end
 end
 
-function plot_RT(series::SeriesFilterdata, model)
+function plot_RT(series::SeriesFilterdata, model; chi2_threshold=300)
     ts = Float64[]
     Rs = Float64[]
     Ts = Float64[]
     @showprogress for t in time_domain(series)
-        (R, T), chi2 = levenberg_marquardt(model, series(t), verbose=0, tol=1e-10)
-        (chi2 > 300) && continue
+        res = levenberg_marquardt(model, series(t), verbose=0, tol=1e-8)
+        res === nothing && continue
+        (R, T), chi2 = res
+        (chi2 > chi2_threshold) && continue
         push!(ts, t)
         push!(Rs, R)
         push!(Ts, T)

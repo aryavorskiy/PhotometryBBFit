@@ -21,12 +21,12 @@ function jacobian!(J, spectrum, pt::SeriesPoint)
     end
 end
 
-function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, verbose=1)
+function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=1)
     J = zeros(nparams(model), length(pt.filters))
     β = collect(sparams(model))
     M = zeros(nparams(model), nparams(model))
     fr = filter_reading(spectrum(model, β), pt)
-    rhs = zero(β)
+    grad = zero(β)
     newβ = zero(β)
     function step!(β, lambda)
         jacobian!(J, spectrum(model, β), pt)
@@ -34,15 +34,15 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
         for i in 1:nparams(model)
             M[i, i] += lambda
         end
-        mul!(rhs, J, (pt.mags - fr) ./ pt.errs)
+        mul!(grad, J, (pt.mags - fr) ./ pt.errs)
         verbose > 2 && begin
             @show M
             @show J
-            @show rhs
+            @show grad
             @show lambda
             println()
         end
-        ldiv!(newβ, lu(M), rhs)
+        ldiv!(newβ, lu(M), grad)
         for i in 1:nparams(model)
             newβ[i] = min(max(β[i] + newβ[i], min_constraints(model, i)), max_constraints(model, i))
         end
@@ -51,33 +51,39 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=10000, 
     end
 
     jacobian!(J, spectrum(model, β), pt)
-    λ = maximum(abs, J)^2 * 1e-3
+    λ₀ = maximum(abs, J)^2 * 1e10
+    λ = λ₀
     old_chi2 = chi2(spectrum(model, β), pt)
     step!(β, λ)
     new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
     chi2(spectrum(model, step!(β, λ)), pt)
 
     for i in 1:maxiter
-        verbose > 1 && (println("iteration #$i:"); @show β)
-        if new_chi2 < old_chi2
-            λ *= 1.5
-        elseif λ > eps()
-            λ *= 0.2
-        end
-        old_chi2 = new_chi2
-        verbose > 1 && (@show newβ; @show new_chi2; println())
-
+        # check convergence
         d = sum(@. abs(β - newβ) / max(β, 1))
         if d < tol && i > 10
             verbose > 0 && @info "Converged after $i iterations with χ² = $(new_chi2)"
             return spectrum(model, newβ), new_chi2
         end
 
+        # adjust damping
+        verbose > 1 && (println("iteration #$i:"); @show β)
+        rho = (old_chi2 - new_chi2) / sum(abs2, J' * (newβ - β))
+        if rho < 1e-3 && λ < λ₀ * 1e16
+            λ *= 8
+        elseif rho > 0.75 && λ > λ₀ * 1e-16
+            λ *= 0.1
+        end
+        old_chi2 = new_chi2
+        verbose > 1 && (@show newβ; @show new_chi2; println())
+
+        # new step
         β, newβ = newβ, β
         step!(β, λ)
         new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
     end
-    error("Did not converge!")
+    verbose > 1 && @warn "Did not converge!"
+    return nothing
 end
 # function findmin_newt(f; maxiter=10000, tol=1e-2, arg=100., step=1, verbose=false)
 #     v = f(arg)

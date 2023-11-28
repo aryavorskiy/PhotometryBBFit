@@ -13,7 +13,7 @@ Base.iterate(spectrum::PlanckSpectrum, ::Val{:T}) = spectrum.T, Val(:End)
 Base.iterate(::PlanckSpectrum, ::Val{:End}) = nothing
 
 @inline (spectrum::PlanckSpectrum)(λ) =
-    (2h * c^2 * 1e40 * 1e-8 * 4pi) / λ^5 / (exp((h * c * 1e8 / kb) / λ / spectrum.T) - 1) * spectrum.R^2
+    (2π * h * c^2 * 1e40 * 1e-8 * 4pi) / λ^5 / (exp((h * c * 1e8 / kb) / λ / spectrum.T) - 1) * spectrum.R^2
 @inline function gradient(spectrum::PlanckSpectrum, λ)
     pw = (h * c * 1e8 / kb) / λ / spectrum.T
     ex = exp(pw)
