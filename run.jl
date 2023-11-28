@@ -17,9 +17,13 @@ function plot_RT(series::SeriesFilterdata, model; chi2_threshold=300)
     ts = Float64[]
     Rs = Float64[]
     Ts = Float64[]
+    ts_nconverged = Float64[]
     @showprogress for t in time_domain(series)
         res = levenberg_marquardt(model, series(t), verbose=0, tol=1e-8)
-        res === nothing && continue
+        if res === nothing
+            push!(ts_nconverged, t)
+            continue
+        end
         (R, T), chi2 = res
         (chi2 > chi2_threshold) && continue
         push!(ts, t)
@@ -27,6 +31,7 @@ function plot_RT(series::SeriesFilterdata, model; chi2_threshold=300)
         push!(Ts, T)
     end
 
+    !isempty(ts_nconverged) && @show ts_nconverged
     pyplot()
     p = plot(size=(1000, 450), layout=2, xlab="timestamp, JD", leg=:none)
     scatter!(p[1], ts, Rs, ylab = "radius, cm", xlims=(0, NaN), ylims=(0, NaN))

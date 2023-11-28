@@ -105,10 +105,13 @@ function (sfd::SeriesFilterdata)(time)
     [ser(time)[1] for ser in sfd.sers[mask]],
     [ser(time)[2] for ser in sfd.sers[mask]])
 end
-function time_domain(sfd::SeriesFilterdata; tol=1e-8)
+function time_domain(sfd::SeriesFilterdata; tol=1e-8, n_overlap=2)
     ts = Float64[]
+    tstart = sort([ser.time[1] for ser in sfd.sers])[n_overlap]
+    tend = sort([ser.time[end] for ser in sfd.sers])[end - n_overlap + 1]
     for ser in sfd.sers
         for t in ser.time
+            tstart ≤ t ≤ tend || continue
             any(tt -> isapprox(t, tt, atol=tol), ts) || push!(ts, t)
         end
     end

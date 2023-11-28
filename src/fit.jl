@@ -22,19 +22,25 @@ function jacobian!(J, spectrum, pt::SeriesPoint)
 end
 
 function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=1)
-    J = zeros(nparams(model), length(pt.filters))
     β = collect(sparams(model))
-    M = zeros(nparams(model), nparams(model))
+    newβ = similar(β)
+    β_buffer = similar(β)
+
     fr = filter_reading(spectrum(model, β), pt)
-    grad = zero(β)
-    newβ = zero(β)
-    function step!(β, lambda)
+    fr_buffer = similar(fr)
+
+    J = zeros(nparams(model), length(pt.filters))
+    M = zeros(nparams(model), nparams(model))
+    grad = similar(β)
+
+    function step!(fr, β, lambda)
+        # assume fr contains readings at β
         jacobian!(J, spectrum(model, β), pt)
         mul!(M, J, J')
         for i in 1:nparams(model)
             M[i, i] += lambda
         end
-        mul!(grad, J, (pt.mags - fr) ./ pt.errs)
+        mul!(grad, J, (pt.mags .- fr) ./ pt.errs)
         verbose > 2 && begin
             @show M
             @show J
@@ -46,17 +52,17 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         for i in 1:nparams(model)
             newβ[i] = min(max(β[i] + newβ[i], min_constraints(model, i)), max_constraints(model, i))
         end
-        filter_reading!(fr, spectrum(model, newβ), pt)
         return newβ
     end
+    _chi2(_fr) = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, _fr, pt.errs))
 
     jacobian!(J, spectrum(model, β), pt)
     λ₀ = maximum(abs, J)^2 * 1e10
     λ = λ₀
-    old_chi2 = chi2(spectrum(model, β), pt)
-    step!(β, λ)
-    new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
-    chi2(spectrum(model, step!(β, λ)), pt)
+    old_chi2 = _chi2(fr)
+    step!(fr, β, λ)
+    filter_reading!(fr_buffer, spectrum(model, β), pt)
+    new_chi2 = _chi2(fr_buffer)
 
     for i in 1:maxiter
         # check convergence
@@ -69,62 +75,24 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         # adjust damping
         verbose > 1 && (println("iteration #$i:"); @show β)
         rho = (old_chi2 - new_chi2) / sum(abs2, J' * (newβ - β))
-        if rho < 1e-3 && λ < λ₀ * 1e16
-            λ *= 8
-        elseif rho > 0.75 && λ > λ₀ * 1e-16
-            λ *= 0.1
-        end
-        old_chi2 = new_chi2
-        verbose > 1 && (@show newβ; @show new_chi2; println())
+        if rho < 5e-2 && λ < λ₀ * 1e16
+            # Bad step, increase damping and repeat
+            λ *= 10
+        else
+            if rho > 0.65 && λ > λ₀ * 1e-16
+                λ *= 0.2
+            end
+            old_chi2 = new_chi2
+            verbose > 1 && (@show rho; @show newβ; @show new_chi2; println())
 
-        # new step
-        β, newβ = newβ, β
-        step!(β, λ)
-        new_chi2 = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, fr, pt.errs))
+            # prepare for new step
+            β, newβ = newβ, β
+            fr, fr_buffer = fr_buffer, fr
+        end
+        step!(fr, β, λ)
+        filter_reading!(fr_buffer, spectrum(model, newβ), pt)
+        new_chi2 = _chi2(fr_buffer)
     end
-    verbose > 1 && @warn "Did not converge!"
+    verbose > 0 && @warn "Did not converge!"
     return nothing
 end
-# function findmin_newt(f; maxiter=10000, tol=1e-2, arg=100., step=1, verbose=false)
-#     v = f(arg)
-#     for i in 1:maxiter
-#         oarg = arg
-#         f1 = f(arg + step)
-#         f2 = f(arg + 2step)
-#         darg = (4 * f1 - f2 - 3 * v) / 3 / abs(f2 - 2 * f1 + v) * step
-#         if isfinite(darg)
-#             arg -= darg
-#             v = f(arg)
-#         end
-#         verbose && i % 100 == 0 && @show (arg, abs(oarg-arg), v)
-
-#         if abs(oarg - arg) / (arg + abs(oarg - arg)) < tol
-#             verbose && @info "Converged on iteration #$i"
-#             return arg
-#         end
-#     end
-#     error("Did not converge!")
-# end
-
-# using AffineInvariantMCMC
-
-# function find_RT(sp::SeriesPoint; nwalkers=100)
-#     numdims = 5
-#     thinning = 10
-#     numsamples_perwalker = 1000
-#     burnin = 100
-
-#     stds = exp(5 * randn(numdims))
-#     means = 1 + 5 * rand(numdims)
-#     llhood = x->begin
-#         retval = 0.
-#         for i = eachindex(x)
-#             retval -= .5 * ((x[i] - means[i]) / stds[i]) ^ 2
-#         end
-#         return retval
-#     end
-#     x0 = rand(numdims, numwalkers) * 10 - 5
-#     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, x0, burnin, 1)
-#     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, chain[:, :, end], numsamples_perwalker, thinning)
-#     flatchain, flatllhoodvals = AffineInvariantMCMC.flattenmcmcarray(chain, llhoodvals)
-# end
