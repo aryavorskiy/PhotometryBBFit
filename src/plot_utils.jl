@@ -1,5 +1,23 @@
 using RecipesBase
 
+@recipe function f(filter::Filter)
+    label --> filter.id
+    @series begin
+        fill := true
+        fillalpha := 0.3
+        fillstyle := :/
+        ylims := (0, NaN)
+        (filter.wavelength), filter.transmission
+    end
+    @series begin
+        label := :none
+        seriestype := :vline
+        linestyle := :dash
+        seriescolor := get(plotattributes, :seriescolor, :black)
+        [lambda_eff(filter)]
+    end
+end
+
 @recipe function f(fser::FitSeries)
     layout := 2
     xlabel := "timestamp"
@@ -64,12 +82,43 @@ end
     end
 end
 
+@recipe function f(res::LMResult, ::Val{:sed}; showscatter=false)
+    lmin = Inf
+    lmax = -Inf
+    λeffs = Float64[]
+    markers = [:diamond, :circle, :ltriangle, :rtriangle, :star5, :star8]
+    for (i, filter) in enumerate(res.pt.filters)
+        λeff = lambda_eff(filter)
+        push!(λeffs, λeff)
+        lmin = min(lmin, minimum(filter.wavelength))
+        lmax = max(lmax, maximum(filter.wavelength))
+        @series begin
+            label := filter.id
+            yerror := res.pt.errs[i]
+            seriestype := :scatter
+            markershape := markers[(i - 1) % length(markers) + 1]
+            [(λeff, res.pt.vals[i])]
+        end
+    end
+    @series begin
+        label := ""
+        range(lmin, lmax, 100), l -> res.spectrum(l)
+    end
+    if showscatter
+        @series begin
+            label := ""
+            seriestype := :scatter
+            λeffs, [filter_flux(res.spectrum, f) for f in res.pt.filters]
+        end
+    end
+end
+
 @recipe function f(res::LMResult)
-    seriestype --> :heatmap # TODO change to :path
+    seriestype --> :path
     if plotattributes[:seriestype] == :heatmap
         (res, Val(:heatmap))
     elseif plotattributes[:seriestype] == :path
-        (res, Val(:sed))    # TODO
+        (res, Val(:sed))
     else error("unsupported series type $(plotattributes[:seriestype])")
     end
 end

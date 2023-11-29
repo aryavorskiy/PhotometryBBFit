@@ -46,6 +46,8 @@ Base.iterate(::LMResult, ::Val{:end}) = nothing
 chi2(r::LMResult) = r.chi2
 chi2dof(r::LMResult) = r.chi2 / length(r.pt.filters)
 nparams(r::LMResult) = length(r.spectrum)
+residuals(r::LMResult) = filter_flux(r.spectrum, r.pt) - r.pt.vals
+fit_summary(r::LMResult) = fit_summary(r.spectrum, r.pt)
 
 function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=0)
     β = collect(start_params(model))

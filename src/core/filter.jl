@@ -45,6 +45,8 @@ function filter_flux(spectrum, filter::Filter)
     end
 end
 
+lambda_eff(filter::Filter) = sqrt(filter_flux(l -> 1, filter) / filter_flux(l -> l^-2, filter))
+
 function interpolate(filter::Filter{T}, wavelengths) where T
     transmissions = T[]
     for wl in wavelengths

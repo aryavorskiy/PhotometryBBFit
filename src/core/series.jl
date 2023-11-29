@@ -42,7 +42,7 @@ function chi2(spectrum, pt::SeriesPoint)
 end
 chi2dof(spectrum, pt::SeriesPoint) = chi2(spectrum, pt) / length(pt.filters)
 const REPORT_3σ = ("out of 3σ", "in 3σ")
-function summary(spectrum, pt::SeriesPoint)
+function fit_summary(spectrum, pt::SeriesPoint)
     println("χ² = $(chi2(spectrum, pt))")
     m = filter_flux(spectrum, pt)
     for i in eachindex(pt.filters)
