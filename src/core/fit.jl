@@ -1,4 +1,5 @@
 using ProgressMeter
+using Measurements
 
 abstract type AbstractSpectrum end
 @inline (spectrum::AbstractSpectrum)(λ) = spectral_density(spectrum, λ)
@@ -134,11 +135,27 @@ end
 struct FitSeries{ST, MT, T}
     timestamps::Vector{T}
     fitresults::Vector{LMResult{ST, MT, T}}
+    param_measurements::Vector{Vector{Measurement{T}}}
 end
+function Base.copy(fs::FitSeries)
+    FitSeries(
+        copy(fs.timestamps),
+        copy(fs.param_measurements),
+        [copy(meas) for meas in fs.param_measurements]
+    )
+end
+
 function fit(ser::PhotometryData, model, times=time_domain(ser);
         filter=true, threshold=Inf, kw...)
-    fser = FitSeries(times,
-        @showprogress[levenberg_marquardt(model, ser(t); kw...) for t in times])
+    fits = @showprogress[levenberg_marquardt(model, ser(t); kw...) for t in times]
+    meas = [Measurement{Float64}[] for _ in 1:nparams(model)]
+    for fit in fits
+        vs = Measurements.correlated_values(Float64.(fit.spectrum), fit.covar)
+        @simd for i in 1:nparams(model)
+            push!(meas[i], vs[i])
+        end
+    end
+    fser = FitSeries(times, fits, meas)
     if filter
         return filter!(chi2dof_threshold(threshold), fser)
     else return fser
@@ -148,10 +165,13 @@ function Base.filter!(f, fser::FitSeries)
     inds = findall(!f, fser.fitresults)
     deleteat!(fser.timestamps, inds)
     deleteat!(fser.fitresults, inds)
+    for i in 1:nparams(first(fser.fitresults))
+        deleteat!(fser.param_measurements[i], inds)
+    end
     return fser
 end
 Base.filter(f, fser::FitSeries) =
-    filter!(f, FitSeries(copy(fser.timestamps), copy(fser.fitresults)))
+    filter!(f, copy(fser))
 chi2dof_threshold(th) = res -> res.converged && chi2dof(res) < th
 
 function Base.getindex(fser::FitSeries; t)
@@ -160,8 +180,10 @@ function Base.getindex(fser::FitSeries; t)
 end
 Base.getindex(fser::FitSeries, i::Int) = fser.fitresults[i]
 
-struct ParamSeries{T}
-    xs::Vector{T}
-    ys::Vector{T}
-    yerrs::Vector{T}
+function Base.getproperty(fser::FitSeries{ST}, param::Symbol) where ST
+    param_index = findfirst(==(param), fieldnames(ST))
+    if param_index !== nothing
+        return fser.param_measurements[param_index]
+    end
+    return getfield(fser, param)
 end

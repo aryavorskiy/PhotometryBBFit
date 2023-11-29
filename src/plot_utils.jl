@@ -1,10 +1,5 @@
 using RecipesBase
 
-@recipe function f(ps::ParamSeries)
-    yerror := ps.yerrs
-    lims := :round
-    ps.xs, ps.ys
-end
 @recipe function f(fser::FitSeries)
     layout := 2
     xlabel := "timestamp"
@@ -12,25 +7,15 @@ end
     @series begin
         subplot := 1
         ylabel := "radius, cm"
-        fser.R
+        fser.timestamps, fser.R
     end
     @series begin
         subplot := 2
         ylabel := "temperature, K"
         ylims := (0, 20000)
         yformatter := :plain
-        fser.T
+        fser.timestamps, fser.T
     end
-end
-
-function Base.getproperty(fser::FitSeries{ST}, param::Symbol) where ST
-    param_index = findfirst(==(param), fieldnames(ST))
-    if param_index !== nothing
-        return ParamSeries(fser.timestamps,
-        [getproperty(res.spectrum, param) for res in fser.fitresults],
-        [sqrt(res.covar[param_index, param_index]) for res in fser.fitresults])
-    end
-    return getfield(fser, param)
 end
 
 @recipe function f(res::LMResult, ::Val{:heatmap})
