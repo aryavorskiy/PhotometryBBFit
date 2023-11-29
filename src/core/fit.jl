@@ -64,7 +64,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         @inbounds @simd for i in 1:nparams(model)
             M[i, i] += lambda
         end
-        mul!(grad, wJ, (pt.mags .- fr) ./ pt.errs)
+        mul!(grad, wJ, (pt.vals .- fr) ./ pt.errs)
         verbose > 1 && begin
             @show M
             @show wJ
@@ -77,7 +77,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         apply_constraints!(newβ, model)
         return newβ
     end
-    _chi2(_fr) = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, _fr, pt.errs))
+    _chi2(_fr) = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.vals, _fr, pt.errs))
 
     weighted_jacobian!(wJ, spectrum(model, β), pt)
     λ₀ = maximum(abs, wJ)^2 * 1e10
@@ -135,7 +135,7 @@ struct FitSeries{ST, MT, T}
     timestamps::Vector{T}
     fitresults::Vector{LMResult{ST, MT, T}}
 end
-function fit(ser::SeriesFilterdata, model, times=time_domain(ser);
+function fit(ser::PhotometryData, model, times=time_domain(ser);
         filter=true, threshold=Inf, kw...)
     fser = FitSeries(times,
         @showprogress[levenberg_marquardt(model, ser(t); kw...) for t in times])

@@ -60,11 +60,11 @@ function read_series(file)
     tags_and_series = Dict{String, Series{Float64}}()
     for line in eachline(file)
         startswith(line, '#') && continue
-        time_s, mag_s, err_s, tag = split(line, r"\s+|\s*,\s*")
-        time, mag, err = parse.(Float64, (time_s, mag_s, err_s))
+        time_s, val_s, err_s, tag = split(line, r"\s+|\s*,\s*")
+        time, val, err = parse.(Float64, (time_s, val_s, err_s))
         tag in keys(tags_and_series) ||
             (tags_and_series[tag] = Series())
-        insert_measurement!(tags_and_series[tag], time, mag, err)
+        insert_measurement!(tags_and_series[tag], time, val, err)
     end
     tags = collect(keys(tags_and_series))
     sers = collect(values(tags_and_series))
@@ -72,7 +72,7 @@ function read_series(file)
     return tags[sp], sers[sp]
 end
 
-function read_series_filterdata(callback, file; unit=Luminosity())
+function read_photometry_data(callback, file; unit=Luminosity())
     tags, n_sers = read_series(file)
     filters = [get_filter(callback, tag) for tag in tags]
     sers = [to_luminosity(unit, ser) for ser in n_sers]
@@ -83,5 +83,5 @@ function read_series_filterdata(callback, file; unit=Luminosity())
         filters = filters[.!notfound_mask]
         sers = sers[.!notfound_mask]
     end
-    return SeriesFilterdata(convert(Vector{Filter{Float64}}, filters), sers)
+    return PhotometryData(convert(Vector{Filter{Float64}}, filters), sers)
 end

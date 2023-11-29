@@ -18,9 +18,9 @@ function to_luminosity(unit::Flux, val, err)
     return (val, err) .* (4pi * upreferred(unit.dist^2 / unit.area))
 end
 function to_luminosity(unit, ser::Series)
-    new_ser = Series(ser.time, similar(ser.mag), similar(ser.err))
+    new_ser = Series(ser.time, similar(ser.val), similar(ser.err))
     for i in eachindex(ser.time)
-        new_ser.mag[i], new_ser.err[i] = to_luminosity(unit, ser.mag[i], ser.err[i])
+        new_ser.val[i], new_ser.err[i] = to_luminosity(unit, ser.val[i], ser.err[i])
     end
     return new_ser
 end

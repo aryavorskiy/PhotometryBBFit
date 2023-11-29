@@ -2,6 +2,6 @@ data/*/
 Manifest.toml
 .*/
 *old*
-*.png
-*.zip
+finally*.png
 *.gz
+run.jl
