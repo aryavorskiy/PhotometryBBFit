@@ -4,7 +4,6 @@ struct Filter{T}
     wavelength::Vector{T}
     wavelength_weights::Vector{T}
     transmission::Vector{T}
-    norm_const::Float64
     mode::Symbol
     id::String
     function Filter{T}(wavelength::Vector{T}, transmission::Vector{T}, mode::Symbol=:photon, id="") where T
@@ -18,9 +17,15 @@ struct Filter{T}
         norm_const = mode == :energy ?
         sum(@. wavelength_weights * transmission) :
         sum(@. wavelength_weights * wavelength * transmission)
-        return new{T}(wavelength, wavelength_weights, transmission, norm_const, mode, id)
+        transmission ./= norm_const
+        return new{T}(wavelength, wavelength_weights, transmission, mode, id)
     end
 end
+
+Base.:(==)(f1::Filter, f2::Filter) =
+    f1.wavelength == f2.wavelength && f1.transmission == f2.transmission && f1.mode == f2.mode
+Base.hash(f::Filter) =
+    Base.hash(f.wavelength, hash(f.transmission, hash(f.mode)))
 
 function Base.write(io::IO, filter::Filter{T}) where T
     write(io, length(filter.transmission)) +
@@ -39,9 +44,9 @@ end
 
 function filter_flux(spectrum, filter::Filter)
     if filter.mode == :energy
-        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission)) / filter.norm_const
+        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission))
     elseif filter.mode == :photon
-        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) / filter.norm_const
+        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength))
     end
 end
 

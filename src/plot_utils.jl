@@ -100,16 +100,14 @@ end
             [(λeff, res.pt.vals[i])]
         end
     end
+    (plmin, plmax) = get(plotattributes, :xlims, (lmin, lmax))
+    isfinite(plmin) && (lmin = plmin)
+    isfinite(plmax) && (lmax = plmax)
     @series begin
         label := ""
-        range(lmin, lmax, 100), l -> res.spectrum(l)
-    end
-    if showscatter
-        @series begin
-            label := ""
-            seriestype := :scatter
-            λeffs, [filter_flux(res.spectrum, f) for f in res.pt.filters]
-        end
+        xformatter := :plain
+        xlims := (lmin, lmax)
+        l -> res.spectrum(l)
     end
 end
 
