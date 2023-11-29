@@ -56,6 +56,7 @@ function chi2(spectrum, pt::SeriesPoint)
     return sum(((y1, y2, err),) -> ((y1 - y2) / err)^2,
         zip(pt.mags, filter_reading(spectrum, pt), pt.errs))
 end
+chi2dof(spectrum, pt::SeriesPoint) = chi2(spectrum, pt) / length(pt.filters)
 const REPORT_3σ = ("out of 3σ", "in 3σ")
 function summary(spectrum, pt::SeriesPoint)
     println("χ² = $(chi2(spectrum, pt))")

@@ -21,10 +21,28 @@ function jacobian!(J, spectrum, pt::SeriesPoint)
     end
 end
 
-function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=1)
+struct LMResult{ST}
+    spectrum::ST
+    covar::Matrix{Float64}
+    chi2::Float64
+    converged::Bool
+    iters::Int
+    npoints::Int
+end
+
+Base.iterate(r::LMResult) = (r.spectrum, Val(:covar))
+Base.iterate(r::LMResult, ::Val{:covar}) = (r.covar, Val(:chi2))
+Base.iterate(r::LMResult, ::Val{:chi2}) = (chi2dof(r), Val(:conv))
+Base.iterate(r::LMResult, ::Val{:conv}) = (r.converged, Val(:iters))
+Base.iterate(r::LMResult, ::Val{:iters}) = (r.iters, Val(:end))
+Base.iterate(::LMResult, ::Val{:end}) = nothing
+
+chi2(r::LMResult) = r.chi2
+chi2dof(r::LMResult) = r.chi2 / r.npoints
+
+function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=0)
     β = collect(sparams(model))
     newβ = similar(β)
-    β_buffer = similar(β)
 
     fr = filter_reading(spectrum(model, β), pt)
     fr_buffer = similar(fr)
@@ -41,7 +59,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
             M[i, i] += lambda
         end
         mul!(grad, J, (pt.mags .- fr) ./ pt.errs)
-        verbose > 2 && begin
+        verbose > 1 && begin
             @show M
             @show J
             @show grad
@@ -64,16 +82,18 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
     filter_reading!(fr_buffer, spectrum(model, β), pt)
     new_chi2 = _chi2(fr_buffer)
 
-    for i in 1:maxiter
+    converged = false
+    iters = 1
+    while iters < maxiter && !converged
         # check convergence
         d = sum(@. abs(β - newβ) / max(β, 1))
-        if d < tol && i > 10
-            verbose > 0 && @info "Converged after $i iterations with χ² = $(new_chi2)"
-            return spectrum(model, newβ), new_chi2
+        if d < tol
+            converged = true
+            break
         end
 
         # adjust damping
-        verbose > 1 && (println("iteration #$i:"); @show β)
+        verbose > 0 && (println("iteration #$iters:"); @show β)
         rho = (old_chi2 - new_chi2) / sum(abs2, J' * (newβ - β))
         if rho < 5e-2 && λ < λ₀ * 1e16
             # Bad step, increase damping and repeat
@@ -83,7 +103,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
                 λ *= 0.2
             end
             old_chi2 = new_chi2
-            verbose > 1 && (@show rho; @show newβ; @show new_chi2; println())
+            verbose > 0 && (@show rho; @show newβ; @show new_chi2; println())
 
             # prepare for new step
             β, newβ = newβ, β
@@ -92,7 +112,15 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         step!(fr, β, λ)
         filter_reading!(fr_buffer, spectrum(model, newβ), pt)
         new_chi2 = _chi2(fr_buffer)
+        iters += 1
     end
-    verbose > 0 && @warn "Did not converge!"
-    return nothing
+    out_spec = spectrum(model, newβ)
+    jacobian!(J, out_spec, pt)
+    return LMResult(
+        out_spec,
+        inv(J * J'),
+        new_chi2,
+        converged,
+        iters,
+        length(pt.filters))
 end
