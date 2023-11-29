@@ -1,6 +1,8 @@
-include("filter.jl")
-include("series.jl")
-include("planck.jl")
-include("fit.jl")
+include("core/planck.jl")
+include("core/filter.jl")
+include("core/series.jl")
+include("core/fit.jl")
 
-id = "Palomar/Arp1961.103aO_atm"
+include("luminosity_units.jl")
+include("load_utils.jl")
+include("plot_utils.jl")

@@ -9,6 +9,7 @@ struct Filter{T}
     id::String
     function Filter{T}(wavelength::Vector{T}, transmission::Vector{T}, mode::Symbol=:photon, id="") where T
         @assert length(wavelength) == length(transmission)
+        @assert issorted(wavelength)
         @assert mode in (:photon, :energy) "unsupported mode `$mode`"
         wavelength_weights = zero(wavelength)
         wavelength_weights[1:end-1] += diff(wavelength)
@@ -36,43 +37,27 @@ function Base.read(io::IO, ::Type{Filter{T}}) where T
     return Filter{T}(wavelength, transparency)
 end
 
-using Downloads, Logging
-
-"""
-    download_filter(id)
-
-Download filter info from svo2.cab.inta-csic.es website. Returns a `Filter`.
-"""
-function download_filter(id::String, mode=:photon)
-    file = tempname()
-    Downloads.download("http://svo2.cab.inta-csic.es/theory/fps/getdata.php?format=ascii&id=$id", file)
-    filter = read_filter(file, mode, id)
-    rm(file)
-    return filter
-end
-
-"""
-    read_filter(file)
-
-Reads filter info from `file` in tab-separated format. Returns a `Filter`.
-"""
-function read_filter(file, mode=:photon, id=file)
-    wavelength = Float64[]
-    transparency = Float64[]
-    for line in eachline(file)
-        wl, ts = parse.(Float64, split(line, r"\s+|,\s*"))
-        push!(wavelength, wl)
-        push!(transparency, ts)
-    end
-    length(wavelength) == 0 && @warn "Empty filter data in filename `$file`"
-    return Filter{Float64}(wavelength, transparency, mode, id)
-end
-
-const c = 3e10
-function filter_reading(spectrum, filter::Filter)
+function filter_flux(spectrum, filter::Filter)
     if filter.mode == :energy
         return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission)) / filter.norm_const
     elseif filter.mode == :photon
         return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength)) / filter.norm_const
     end
 end
+
+function interpolate(filter::Filter{T}, wavelengths) where T
+    transmissions = T[]
+    for wl in wavelengths
+        i = findfirst(>(wl), filter.wavelength)
+        if i in (1, nothing)
+            push!(transmissions, 0)
+        else
+            lw = (wl - filter.wavelength[i-1]) / (filter.wavelength[i] - filter.wavelength[i-1])
+            tr = filter.wavelength[i-1] * lw + filter.wavelength[i] * (1 - lw)
+            push!(transmissions, tr)
+        end
+    end
+    Filter{T}(wavelengths, transmissions, filter.mode, filter.id)
+end
+interpolate(filter::Filter; step) =
+    interpolate(filter, minimum(filter.wavelength):step:maximum(filter.wavelength))

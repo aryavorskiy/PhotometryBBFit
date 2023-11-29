@@ -8,26 +8,27 @@ max_constraints(any, i) = max_constraints(any)[i]
 nparams(model) = length(sparams(model))
 
 spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)
-split_spectrum(spectrum::PlanckSpectrum) = BlackBodyModel(), (spectrum.R, spectrum.T)
+model(::PlanckSpectrum) = BlackBodyModel()
 
 using LinearAlgebra
 
-function jacobian(spectrum, filter::Filter)
-    return filter_reading(l -> gradient(spectrum, l), filter)
+function jacobian(spectrum::AbstractSpectrum, filter::Filter)
+    return filter_flux(l -> gradient(spectrum, l), filter)
 end
-function jacobian!(J, spectrum, pt::SeriesPoint)
+function jacobian!(J, spectrum::AbstractSpectrum, pt::SeriesPoint)
     for i in eachindex(pt.filters)
-        J[:, i] .= jacobian(spectrum, pt.filters[i])  ./ pt.errs[i]
+        J[:, i] .= jacobian(spectrum::AbstractSpectrum, pt.filters[i])  ./ pt.errs[i]
     end
 end
 
-struct LMResult{ST}
+struct LMResult{ST, MT, T}
     spectrum::ST
+    model::MT
     covar::Matrix{Float64}
     chi2::Float64
     converged::Bool
     iters::Int
-    npoints::Int
+    pt::SeriesPoint{T}
 end
 
 Base.iterate(r::LMResult) = (r.spectrum, Val(:covar))
@@ -38,13 +39,14 @@ Base.iterate(r::LMResult, ::Val{:iters}) = (r.iters, Val(:end))
 Base.iterate(::LMResult, ::Val{:end}) = nothing
 
 chi2(r::LMResult) = r.chi2
-chi2dof(r::LMResult) = r.chi2 / r.npoints
+chi2dof(r::LMResult) = r.chi2 / length(r.pt.filters)
+nparams(r::LMResult) = length(r.spectrum)
 
 function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=0)
     β = collect(sparams(model))
     newβ = similar(β)
 
-    fr = filter_reading(spectrum(model, β), pt)
+    fr = filter_flux(spectrum(model, β), pt)
     fr_buffer = similar(fr)
 
     J = zeros(nparams(model), length(pt.filters))
@@ -79,7 +81,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
     λ = λ₀
     old_chi2 = _chi2(fr)
     step!(fr, β, λ)
-    filter_reading!(fr_buffer, spectrum(model, β), pt)
+    filter_flux!(fr_buffer, spectrum(model, β), pt)
     new_chi2 = _chi2(fr_buffer)
 
     converged = false
@@ -110,7 +112,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
             fr, fr_buffer = fr_buffer, fr
         end
         step!(fr, β, λ)
-        filter_reading!(fr_buffer, spectrum(model, newβ), pt)
+        filter_flux!(fr_buffer, spectrum(model, newβ), pt)
         new_chi2 = _chi2(fr_buffer)
         iters += 1
     end
@@ -118,9 +120,10 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
     jacobian!(J, out_spec, pt)
     return LMResult(
         out_spec,
+        model,
         inv(J * J'),
         new_chi2,
         converged,
         iters,
-        length(pt.filters))
+        pt)
 end
