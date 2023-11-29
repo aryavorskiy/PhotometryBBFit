@@ -1,34 +1,38 @@
-struct BlackBodyModel end
+using ProgressMeter
 
-sparams(::BlackBodyModel) = (1e10, 5000.0)
-min_constraints(::BlackBodyModel) = (1e7, 1000.0)
-max_constraints(::BlackBodyModel) = (1e70, 1000_000.0)
-min_constraints(any, i) = min_constraints(any)[i]
-max_constraints(any, i) = max_constraints(any)[i]
-nparams(model) = length(sparams(model))
+abstract type AbstractSpectrum end
+@inline (spectrum::AbstractSpectrum)(λ) = spectral_density(spectrum, λ)
 
-spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)
-model(::PlanckSpectrum) = BlackBodyModel()
+abstract type AbstractModel end
+start_params(::AbstractModel) = error("not implemented")
+constraints(::AbstractModel) = error("not implemented")
+function apply_constraints!(params, model::AbstractModel)
+    @inbounds @simd for i in eachindex(params)
+        mi, ma = constraints(model)[i]
+        params[i] = params[i] > ma ? ma : params[i] < mi ? mi : params[i]
+    end
+end
+nparams(model::AbstractModel) = length(start_params(model))
 
 using LinearAlgebra
 
 function jacobian(spectrum::AbstractSpectrum, filter::Filter)
     return filter_flux(l -> gradient(spectrum, l), filter)
 end
-function jacobian!(J, spectrum::AbstractSpectrum, pt::SeriesPoint)
-    for i in eachindex(pt.filters)
+function weighted_jacobian!(J, spectrum::AbstractSpectrum, pt::SeriesPoint)
+    @inbounds @simd for i in eachindex(pt.filters)
         J[:, i] .= jacobian(spectrum::AbstractSpectrum, pt.filters[i])  ./ pt.errs[i]
     end
 end
 
 struct LMResult{ST, MT, T}
+    pt::SeriesPoint{T}
     spectrum::ST
     model::MT
     covar::Matrix{Float64}
     chi2::Float64
     converged::Bool
     iters::Int
-    pt::SeriesPoint{T}
 end
 
 Base.iterate(r::LMResult) = (r.spectrum, Val(:covar))
@@ -43,41 +47,40 @@ chi2dof(r::LMResult) = r.chi2 / length(r.pt.filters)
 nparams(r::LMResult) = length(r.spectrum)
 
 function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=0)
-    β = collect(sparams(model))
+    β = collect(start_params(model))
     newβ = similar(β)
 
     fr = filter_flux(spectrum(model, β), pt)
     fr_buffer = similar(fr)
 
-    J = zeros(nparams(model), length(pt.filters))
+    wJ = zeros(nparams(model), length(pt.filters))
     M = zeros(nparams(model), nparams(model))
     grad = similar(β)
 
     function step!(fr, β, lambda)
         # assume fr contains readings at β
-        jacobian!(J, spectrum(model, β), pt)
-        mul!(M, J, J')
-        for i in 1:nparams(model)
+        weighted_jacobian!(wJ, spectrum(model, β), pt)
+        mul!(M, wJ, wJ')
+        @inbounds @simd for i in 1:nparams(model)
             M[i, i] += lambda
         end
-        mul!(grad, J, (pt.mags .- fr) ./ pt.errs)
+        mul!(grad, wJ, (pt.mags .- fr) ./ pt.errs)
         verbose > 1 && begin
             @show M
-            @show J
+            @show wJ
             @show grad
             @show lambda
             println()
         end
         ldiv!(newβ, lu(M), grad)
-        for i in 1:nparams(model)
-            newβ[i] = min(max(β[i] + newβ[i], min_constraints(model, i)), max_constraints(model, i))
-        end
+        @. newβ += β
+        apply_constraints!(newβ, model)
         return newβ
     end
     _chi2(_fr) = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.mags, _fr, pt.errs))
 
-    jacobian!(J, spectrum(model, β), pt)
-    λ₀ = maximum(abs, J)^2 * 1e10
+    weighted_jacobian!(wJ, spectrum(model, β), pt)
+    λ₀ = maximum(abs, wJ)^2 * 1e10
     λ = λ₀
     old_chi2 = _chi2(fr)
     step!(fr, β, λ)
@@ -96,7 +99,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
 
         # adjust damping
         verbose > 0 && (println("iteration #$iters:"); @show β)
-        rho = (old_chi2 - new_chi2) / sum(abs2, J' * (newβ - β))
+        rho = (old_chi2 - new_chi2) / sum(abs2, wJ' * (newβ - β))
         if rho < 5e-2 && λ < λ₀ * 1e16
             # Bad step, increase damping and repeat
             λ *= 10
@@ -117,13 +120,48 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         iters += 1
     end
     out_spec = spectrum(model, newβ)
-    jacobian!(J, out_spec, pt)
+    weighted_jacobian!(wJ, out_spec, pt)
     return LMResult(
+        pt,
         out_spec,
         model,
-        inv(J * J'),
+        inv(wJ * wJ'),
         new_chi2,
         converged,
-        iters,
-        pt)
+        iters)
+end
+
+struct FitSeries{ST, MT, T}
+    timestamps::Vector{T}
+    fitresults::Vector{LMResult{ST, MT, T}}
+end
+function fit(ser::SeriesFilterdata, model, times=time_domain(ser);
+        filter=true, threshold=Inf, kw...)
+    fser = FitSeries(times,
+        @showprogress[levenberg_marquardt(model, ser(t); kw...) for t in times])
+    if filter
+        return filter!(chi2dof_threshold(threshold), fser)
+    else return fser
+    end
+end
+function Base.filter!(f, fser::FitSeries)
+    inds = findall(!f, fser.fitresults)
+    deleteat!(fser.timestamps, inds)
+    deleteat!(fser.fitresults, inds)
+    return fser
+end
+Base.filter(f, fser::FitSeries) =
+    filter!(f, FitSeries(copy(fser.timestamps), copy(fser.fitresults)))
+chi2dof_threshold(th) = res -> res.converged && chi2dof(res) < th
+
+function Base.getindex(fser::FitSeries; t)
+    i = findmin(_t -> abs(_t - t), fser.timestamps)[2]
+    return fser[i]
+end
+Base.getindex(fser::FitSeries, i::Int) = fser.fitresults[i]
+
+struct ParamSeries{T}
+    xs::Vector{T}
+    ys::Vector{T}
+    yerrs::Vector{T}
 end

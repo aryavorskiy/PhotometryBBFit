@@ -1,12 +1,11 @@
-import Unitful: upreferred
-import UnitfulAstro: cm
+import Unitful: upreferred, cm
 abstract type LightnessUnit end
 struct Luminosity <: LightnessUnit end
 struct Flux{DistT, AreaT} <: LightnessUnit
     dist::DistT
     area::AreaT
 end
-Flux(dist) = Flux(dist, cm^2)
+Flux(;dist, area=cm^2) = Flux(dist, area)
 
 """
     to_luminosity(unit, val, err)

@@ -1,41 +1,5 @@
-using ProgressMeter
 using RecipesBase
 
-struct FitSeries{ST, MT, T}
-    timestamps::Vector{T}
-    fitresults::Vector{LMResult{ST, MT, T}}
-end
-function fit(ser::SeriesFilterdata, model, times=time_domain(ser);
-        filter=true, threshold=Inf, kw...)
-    fser = FitSeries(times,
-        @showprogress[levenberg_marquardt(model, ser(t); kw...) for t in times])
-    if filter
-        return filter_by_chi2dof!(fser; threshold=threshold)
-    else return fser
-    end
-end
-function filter_by_chi2dof!(fser::FitSeries; threshold=Inf)
-    inds = findall(fser.fitresults) do res
-        !res.converged || chi2dof(res) > threshold
-    end
-    deleteat!(fser.timestamps, inds)
-    deleteat!(fser.fitresults, inds)
-    return fser
-end
-filter_by_chi2dof(fser; kw...) =
-    filter_by_chi2dof!(FitSeries(copy(fser.timestamps), copy(fser.fitresults)); kw...)
-
-function Base.getindex(fser::FitSeries; t)
-    i = findmin(_t -> abs(_t - t), fser.timestamps)[2]
-    return fser[i]
-end
-Base.getindex(fser::FitSeries, i::Int) = fser.fitresults[i]
-
-struct ParamSeries{T}
-    xs::Vector{T}
-    ys::Vector{T}
-    yerrs::Vector{T}
-end
 @recipe function f(ps::ParamSeries)
     yerror := ps.yerrs
     lims := :round
@@ -53,6 +17,8 @@ end
     @series begin
         subplot := 2
         ylabel := "temperature, K"
+        ylims := (0, 20000)
+        yformatter := :plain
         fser.T
     end
 end
@@ -67,7 +33,7 @@ function Base.getproperty(fser::FitSeries{ST}, param::Symbol) where ST
     return getfield(fser, param)
 end
 
-@recipe function f(res::LMResult)
+@recipe function f(res::LMResult, ::Val{:heatmap})
     (R, T), covar, χ²dof = res
     model = res.model
     d = 0.06
@@ -75,7 +41,6 @@ end
     local Rs = (1-d)*R:0.02d * R:(1 + d)R
     local Ts = T-dT:dT/50:T+dT
     data = [chi2dof(spectrum(model, (r, t)), res.pt) for t in Ts, r in Rs]
-    gr()
     @series begin
         seriestype := :heatmap
         title --> "χ²/dof in parameter space"
@@ -89,6 +54,20 @@ end
         (Rs, Ts, data)
     end
     @series begin
+        seriescolor := :darkgrey
+        linestyle := :dash
+        label := :none
+        seriestype := :vline
+        (1 - 0.9d)*R:0.3d * R:(1 + 0.9d)R
+    end
+    @series begin
+        seriescolor := :darkgrey
+        linestyle := :dash
+        label := :none
+        seriestype := :hline
+        T-0.9dT:dT*0.3:T+0.9dT
+    end
+    @series begin
         seriestype := :scatter
         xerr := [sqrt(covar[1, 1])]
         yerr := [sqrt(covar[2, 2])]
@@ -97,5 +76,15 @@ end
         xlims := ((1-d) * R, (1+d) * R)
         ylims := (T - dT, T + dT)
         [(R, T)]
+    end
+end
+
+@recipe function f(res::LMResult)
+    seriestype --> :heatmap # TODO change to :path
+    if plotattributes[:seriestype] == :heatmap
+        (res, Val(:heatmap))
+    elseif plotattributes[:seriestype] == :path
+        (res, Val(:sed))    # TODO
+    else error("unsupported series type $(plotattributes[:seriestype])")
     end
 end

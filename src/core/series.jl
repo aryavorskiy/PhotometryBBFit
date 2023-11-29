@@ -28,21 +28,21 @@ struct SeriesPoint{T}
     mags::Vector{T}
     errs::Vector{T}
 end
-function filter_flux(spectrum::AbstractSpectrum, pt::SeriesPoint)
+function filter_flux(spectrum, pt::SeriesPoint)
     return [filter_flux(spectrum, f) for f in pt.filters]
 end
-function filter_flux!(buffer, spectrum::AbstractSpectrum, pt::SeriesPoint)
-    for (i, f) in enumerate(pt.filters)
-        buffer[i] = filter_flux(spectrum, f)
+function filter_flux!(buffer, spectrum, pt::SeriesPoint)
+    @inbounds @simd for i in eachindex(pt.filters)
+        buffer[i] = filter_flux(spectrum, pt.filters[i])
     end
 end
-function chi2(spectrum::AbstractSpectrum, pt::SeriesPoint)
+function chi2(spectrum, pt::SeriesPoint)
     return sum(((y1, y2, err),) -> ((y1 - y2) / err)^2,
         zip(pt.mags, filter_flux(spectrum, pt), pt.errs))
 end
-chi2dof(spectrum::AbstractSpectrum, pt::SeriesPoint) = chi2(spectrum, pt) / length(pt.filters)
+chi2dof(spectrum, pt::SeriesPoint) = chi2(spectrum, pt) / length(pt.filters)
 const REPORT_3σ = ("out of 3σ", "in 3σ")
-function summary(spectrum::AbstractSpectrum, pt::SeriesPoint)
+function summary(spectrum, pt::SeriesPoint)
     println("χ² = $(chi2(spectrum, pt))")
     m = filter_flux(spectrum, pt)
     for i in eachindex(pt.filters)

@@ -4,7 +4,6 @@ const h = 6.626e-27
 const kb = 1.38e-16
 const c = 3e10
 
-abstract type AbstractSpectrum end
 struct PlanckSpectrum <: AbstractSpectrum
     R::Float64
     T::Float64
@@ -26,4 +25,9 @@ Base.length(::PlanckSpectrum) = 2
     orig / (ex - 1) * ex * pw / spectrum.T]
 end
 
-@inline (spectrum::AbstractSpectrum)(λ) = spectral_density(spectrum, λ)
+struct BlackBodyModel <: AbstractModel end
+
+start_params(::BlackBodyModel) = (1e10, 5000.0)
+constraints(::BlackBodyModel) = (1e7 => 1e70, 1e3 => 1e6)
+
+spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)

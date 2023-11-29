@@ -11,7 +11,7 @@ function read_filter(file, mode=:photon, id=file)
     wavelength = Float64[]
     transparency = Float64[]
     for line in eachline(file)
-        wl, ts = parse.(Float64, split(line, r"\s+|,\s*"))
+        wl, ts = parse.(Float64, split(line, r"\s+|\s*,\s*"))
         push!(wavelength, wl)
         push!(transparency, ts)
     end
@@ -24,7 +24,7 @@ get_filter(f::Function, tag::String) = f(tag)
 
 struct SVO2Website end
 function get_filter(::SVO2Website, id::String)
-    mode=:photon
+    mode = :photon  # TODO: download real data from the site
     file = tempname()
     Downloads.download("http://svo2.cab.inta-csic.es/theory/fps/getdata.php?format=ascii&id=$id", file)
     filter = read_filter(file, mode, id)
@@ -56,11 +56,11 @@ end
 
 # Reading data series
 
-function read_series(file; dlm=',')
+function read_series(file)
     tags_and_series = Dict{String, Series{Float64}}()
     for line in eachline(file)
         startswith(line, '#') && continue
-        time_s, mag_s, err_s, tag = split(line, dlm)
+        time_s, mag_s, err_s, tag = split(line, r"\s+|\s*,\s*")
         time, mag, err = parse.(Float64, (time_s, mag_s, err_s))
         tag in keys(tags_and_series) ||
             (tags_and_series[tag] = Series())

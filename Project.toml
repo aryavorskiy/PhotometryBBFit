@@ -1,4 +1,12 @@
+name = "PhotometryFit"
+uuid = "7f18ac49-8c05-4149-8105-59a0dfcef681"
+authors = ["A. Yavorsky <iavorskii.ar@phystech.edu>"]
+version = "0.1.0"
+
 [deps]
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
