@@ -1,7 +1,11 @@
 using ProgressMeter
 using Measurements
 
-abstract type AbstractSpectrum end
+abstract type AbstractSpectrum <: Function end
+params(::AbstractSpectrum) = error("not implemented")
+param_names(s::AbstractSpectrum) = propertynames(s)
+Base.length(sp::AbstractSpectrum) = length(params(sp))
+Base.iterate(sp::AbstractSpectrum, i=1) = i > length(sp) ? nothing : (params(sp)[i], i + 1)
 @inline (spectrum::AbstractSpectrum)(λ) = spectral_density(spectrum, λ)
 
 abstract type AbstractModel end
@@ -152,7 +156,7 @@ function fit(ser::PhotometryData, model, times=time_domain(ser);
     fits = @showprogress[levenberg_marquardt(model, ser(t); kw...) for t in times]
     meas = [Measurement{Float64}[] for _ in 1:nparams(model)]
     for fit in fits
-        vs = Measurements.correlated_values(Float64.(fit.spectrum), fit.covar)
+        vs = Measurements.correlated_values(collect(Float64, fit.spectrum), fit.covar)
         @simd for i in 1:nparams(model)
             push!(meas[i], vs[i])
         end
@@ -183,7 +187,8 @@ end
 Base.getindex(fser::FitSeries, i::Int) = fser.fitresults[i]
 
 function Base.getproperty(fser::FitSeries{ST}, param::Symbol) where ST
-    param_index = findfirst(==(param), fieldnames(ST))
+    param in fieldnames(typeof(fser)) && return getfield(fser, param)
+    param_index = findfirst(==(param), param_names(first(fser.fitresults).spectrum))
     if param_index !== nothing
         return fser.param_measurements[param_index]
     end
