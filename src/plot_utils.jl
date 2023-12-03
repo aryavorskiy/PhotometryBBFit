@@ -18,6 +18,12 @@ using RecipesBase
     end
 end
 
+@recipe function f(ser::Series)
+    xlabel --> "timestamp"
+    yerror := ser.err
+    ser.time, ser.val
+end
+
 @recipe function f(fser::FitSeries)
     layout := 2
     xlabel := "timestamp"
@@ -82,12 +88,18 @@ end
     end
 end
 
-@recipe function f(res::LMResult, ::Val{:sed}; showscatter=false)
+@recipe function f(res::LMResult, ::Val{:sed})
     lmin = Inf
     lmax = -Inf
     λeffs = Float64[]
-    markers = [:diamond, :circle, :ltriangle, :rtriangle, :star5, :star8]
+    markers = [:diamond, :ltriangle, :rtriangle, :star5, :star8, :rect]
+    marker_i = 0
+    prefix = ""
     for (i, filter) in enumerate(res.pt.filters)
+        if prefix != filter.id[1:3]
+            prefix = filter.id[1:3]
+            marker_i += 1
+        end
         λeff = lambda_eff(filter)
         push!(λeffs, λeff)
         lmin = min(lmin, minimum(filter.wavelength))
@@ -96,7 +108,7 @@ end
             label := filter.id
             yerror := res.pt.errs[i]
             seriestype := :scatter
-            markershape := markers[(i - 1) % length(markers) + 1]
+            markershape := markers[(marker_i - 1) % length(markers) + 1]
             [(λeff, res.pt.vals[i])]
         end
     end
@@ -104,7 +116,8 @@ end
     isfinite(plmin) && (lmin = plmin)
     isfinite(plmax) && (lmax = plmax)
     @series begin
-        label := ""
+        title --> params_str(res.spectrum)
+        label --> "fit (χ²/dof = $(trunc(chi2dof(res), digits=2)))"
         xformatter := :plain
         xlims := (lmin, lmax)
         l -> res.spectrum(l)

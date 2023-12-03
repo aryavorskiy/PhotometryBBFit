@@ -10,6 +10,7 @@ struct PlanckSpectrum <: AbstractSpectrum
 end
 
 params(ps::PlanckSpectrum) = (ps.R, ps.T)
+params_str(ps::PlanckSpectrum) = "R = $(trunc(ps.R, sigdigits=3)), T = $(round(Int, ps.T))"
 
 @inline spectral_density(spectrum::PlanckSpectrum, λ) =
     (2π * h * c^2 * 1e40 * 1e-8 * 4pi) / λ^5 /
@@ -30,7 +31,8 @@ spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)
 
 abstract type SpectrumWrapper <: AbstractSpectrum end
 params(rs::SpectrumWrapper) = params(rs.spectrum)
-param_names(rs::SpectrumWrapper) = param_names(getfield(rs, :spectrum))
+params_str(rs::SpectrumWrapper) = params_str(rs.spectrum)
+param_names(rs::SpectrumWrapper) = param_names(rs.spectrum)
 abstract type ModelWrapper <: AbstractModel end
 start_params(rm::ModelWrapper) = start_params(rm.model)
 constraints(rm::ModelWrapper) = constraints(rm.model)
