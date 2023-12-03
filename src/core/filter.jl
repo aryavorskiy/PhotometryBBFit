@@ -27,6 +27,20 @@ Base.:(==)(f1::Filter, f2::Filter) =
 Base.hash(f::Filter) =
     Base.hash(f.wavelength, hash(f.transmission, hash(f.mode)))
 
+function Base.show(io::IO, ::MIME"text/plain", filter::Filter)
+    print(io, "Filter `$(filter.id)`")
+    if !get(io, :compact, false)
+        print(""" with `$(filter.mode)`-type detector
+        λ_eff = $(trunc(lambda_eff(filter), digits=2)) AA, range $(filter.wavelength[1]) .. $(filter.wavelength[end])""")
+    end
+end
+Base.show(io::IO, filter::Filter) =
+    if get(io, :compact, false)
+        show(io, MIME"text/plain"(), filter)
+    else
+        Base.show_default(io, filter)
+    end
+
 function Base.write(io::IO, filter::Filter{T}) where T
     write(io, length(filter.transmission)) +
     write(io, filter.wavelength) +
@@ -50,7 +64,7 @@ function filter_flux(spectrum, filter::Filter)
     end
 end
 
-lambda_eff(filter::Filter) = sqrt(filter_flux(l -> 1, filter) / filter_flux(l -> l^-2, filter))
+lambda_eff(filter::Filter) = filter_flux(l -> l^-2, filter) ^ -0.5
 
 function interpolate(filter::Filter{T}, wavelengths) where T
     transmissions = T[]

@@ -101,6 +101,5 @@ function read_photometry_data(provider, file; unit=Luminosity())
     end
     filters = collect(keys(filters_and_series))
     sers = [to_luminosity(unit, ser) for ser in values(filters_and_series)]
-    sp = sortperm(filters, by=lambda_eff)
-    return PhotometryData(filters[sp], sers[sp])
+    return PhotometryData{Float64}(filters, sers)
 end

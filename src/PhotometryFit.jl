@@ -1,7 +1,7 @@
 module PhotometryFit
 
 include("core/filter.jl")
-export filter_flux, interpolate
+export filter_flux, interpolate, lambda_eff
 include("core/series.jl")
 export fit_summary, time_domain, chi2, chi2dof
 include("core/fit.jl")
