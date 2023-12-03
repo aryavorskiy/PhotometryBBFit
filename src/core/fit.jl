@@ -87,7 +87,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
     _chi2(_fr) = sum(((y1, y2, err),) -> ((y1 - y2) / err)^2, zip(pt.vals, _fr, pt.errs))
 
     weighted_jacobian!(wJ, spectrum(model, β), pt)
-    λ₀ = maximum(abs, wJ)^2 * 1e10
+    λ₀ = maximum(abs, wJ)^2 * 1e4
     λ = λ₀
     old_chi2 = _chi2(fr)
     step!(fr, β, λ)
@@ -111,9 +111,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
             # Bad step, increase damping and repeat
             λ *= 10
         else
-            if rho > 0.65 && λ > λ₀ * 1e-16
-                λ *= 0.2
-            end
+            λ *= 0.3
             old_chi2 = new_chi2
             verbose > 0 && (@show rho; @show newβ; @show new_chi2; println())
 
