@@ -2,30 +2,43 @@ import Base.Broadcast: broadcasted
 
 struct Filter{T}
     wavelength::Vector{T}
-    wavelength_weights::Vector{T}
     transmission::Vector{T}
+    weights::Vector{T}
     mode::Symbol
     id::String
-    function Filter{T}(wavelength::Vector{T}, transmission::Vector{T}, mode::Symbol=:photon, id="") where T
+    function Filter{T}(wavelength::Vector{T}, transmission::Vector{T},
+            mode::Symbol=:photon, id="", precalculate_weights=true) where T
         @assert length(wavelength) == length(transmission)
         @assert issorted(wavelength)
         @assert mode in (:photon, :energy) "unsupported mode `$mode`"
-        wavelength_weights = zero(wavelength)
-        wavelength_weights[1:end-1] += diff(wavelength)
-        wavelength_weights[2:end] += diff(wavelength)
-        wavelength_weights /= 2
-        norm_const = mode == :energy ?
-        sum(@. wavelength_weights * transmission) :
-        sum(@. wavelength_weights * wavelength * transmission)
-        transmission ./= norm_const
-        return new{T}(wavelength, wavelength_weights, transmission, mode, id)
+        weights = similar(wavelength)
+        f = new{T}(wavelength, transmission, weights, mode, id)
+        precalculate_weights && update_weights!(f)
+        return f
     end
+end
+function update_weights!(f::Filter)
+    resize!(f.weights, length(f.wavelength))
+    fill!(f.weights, 0)
+    d = diff(f.wavelength)
+    f.weights[1:end-1] += d
+    f.weights[2:end] += d
+    @. f.weights *= 0.5 * f.transmission
+    if f.mode === :photon
+        @. f.weights *= f.wavelength
+    end
+    f.weights ./= sum(f.weights)
+    return f
 end
 
 Base.:(==)(f1::Filter, f2::Filter) =
     f1.wavelength == f2.wavelength && f1.transmission == f2.transmission && f1.mode == f2.mode
 Base.hash(f::Filter) =
     Base.hash(f.wavelength, hash(f.transmission, hash(f.mode)))
+function Base.copy(f::Filter)
+    f2 = Filter(f.wavelength, f.transmission, f.mode, f.id, false)
+    copyto!(f2.weights, f.weights)
+end
 
 function Base.show(io::IO, ::MIME"text/plain", filter::Filter)
     print(io, "Filter `$(filter.id)`")
@@ -56,17 +69,13 @@ function Base.read(io::IO, ::Type{Filter{T}}) where T
     return Filter{T}(wavelength, transparency)
 end
 
-function filter_flux(spectrum, filter::Filter)
-    if filter.mode == :energy
-        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission))
-    elseif filter.mode == :photon
-        return sum(broadcasted(*, filter.wavelength_weights, broadcasted(spectrum, filter.wavelength), filter.transmission, filter.wavelength))
-    end
-end
+filter_flux(spectrum, filter::Filter) =
+    sum(broadcasted(*, filter.weights, broadcasted(spectrum, filter.wavelength)))
 
 lambda_eff(filter::Filter) = filter_flux(l -> l^-2, filter) ^ -0.5
 
-function interpolate(filter::Filter{T}, wavelengths) where T
+function interpolate!(filter::Filter{T}, wavelengths) where T
+    l = length(wavelengths)
     transmissions = T[]
     for wl in wavelengths
         i = findfirst(>(wl), filter.wavelength)
@@ -78,7 +87,18 @@ function interpolate(filter::Filter{T}, wavelengths) where T
             push!(transmissions, tr)
         end
     end
-    Filter{T}(wavelengths, transmissions, filter.mode, filter.id)
+    resize!(filter.transmission, l)
+    copyto!(filter.transmission, transmissions)
+    copyto!(filter.wavelength, l)
+    copyto!(filter.wavelength, wavelengths)
+    update_weights!(filter)
+end
+interpolate!(filter::Filter; step) =
+    interpolate!(filter, minimum(filter.wavelength):step:maximum(filter.wavelength))
+
+function interpolate(filter::Filter{T}, wavelengths) where T
+    f2 = Filter{T}(filter.wavelength, filter.transmission, filter.mode, filter.id, false)
+    interpolate!(f2, wavelengths)
 end
 interpolate(filter::Filter; step) =
     interpolate(filter, minimum(filter.wavelength):step:maximum(filter.wavelength))
