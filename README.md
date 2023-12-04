@@ -17,9 +17,10 @@ As an example let us fit the SN2013fs photometry data using the black body spect
 
 ```julia
 using PhotometryFit
-using Plots                 # Visualization
-using DelimitedFiles        # Reading data files
-import UnitfulAstro: ly     # Astronomical measurement units
+using Plots                     # Visualization
+using DelimitedFiles            # Reading data files
+import DustExtinction: CCM89    # Cardelli et al. extinction curve
+import UnitfulAstro: ly         # Astronomical measurement units
 
 ser = read_photometry_data(                         # Read photometry data
     FilterFolder("data/Filters/", :photon),         # Filters info is located in this folder
@@ -28,18 +29,20 @@ ser = read_photometry_data(                         # Read photometry data
 
 dates = readdlm("data/13dqy_int_dates.txt") |> vec  # Dates where we will evaluate the spectrum
 
-fit_ser = fit(ser, BlackBodyModel(), dates)         # Fit using the BB model
-scatter(fit_ser)                                    # And plot
+model = Extinction(BlackBodyModel(), CCM89(Rv=3.08), Av=0.035 * 3.08)
+fit_ser = fit(ser, model, dates)                    # Fit using the BB model with extinction
+scatter(fit_ser)                                    # Plot
 ```
 
 This code yields the following picture:
 
 ![](fit.png)
 
-Note that you may need to install `Plots` and `UnitfulAstro` packages. You can do this as follows:
+Note that you may need to install `Plots`, `UnitfulAstro`, `DustExtinction` packages. You can do this as follows:
 
 ```julia
 import Pkg
 Pkg.add("Plots")
 Pkg.add("UnitfulAstro")
+Pkg.add("DustExtinction")
 ```

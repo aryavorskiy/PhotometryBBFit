@@ -10,7 +10,8 @@ struct PlanckSpectrum <: AbstractSpectrum
 end
 
 params(ps::PlanckSpectrum) = (ps.R, ps.T)
-params_str(ps::PlanckSpectrum) = "R = $(trunc(ps.R, sigdigits=3)), T = $(round(Int, ps.T))"
+params_str(ps::PlanckSpectrum) =
+    join(["$k = $(trunc(v, sigdigits=5))" for (k, v) in zip(param_names(ps), params(ps))], ", ")
 
 @inline spectral_density(spectrum::PlanckSpectrum, λ) =
     (2π * h * c^2 * 1e40 * 1e-8 * 4pi) / λ^5 /

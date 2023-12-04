@@ -25,9 +25,10 @@ end
 end
 
 @recipe function f(fser::FitSeries)
+    size --> (800, 350)
     layout := 2
-    xlabel := "timestamp"
-    legend := :none
+    xlabel --> "timestamp"
+    legend --> :none
     @series begin
         subplot := 1
         ylabel := "radius, cm"
