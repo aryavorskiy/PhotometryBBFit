@@ -25,7 +25,12 @@ import UnitfulAstro: ly         # Astronomical measurement units
 ser = read_photometry_data(                         # Read photometry data
     FilterFolder("data/Filters/", :photon),         # Filters info is located in this folder
     "data/data_13dqy_formatted_for_package.txt",    # And the photometry data is here
-    unit=Flux(dist=160e6ly))                # Photometry data is provided in flux values, star is 160Mly far
+    unit=Flux(dist=160e6ly))        # Photometry data is provided in flux values, star is 160Mly far away
+
+for (filter, s) in ser                              # Add relative error
+    lambda_eff(filter) < 3000 && continue
+    @. s.err = √(s.err^2 + (s.val * 0.1)^2)
+end
 
 dates = readdlm("data/13dqy_int_dates.txt") |> vec  # Dates where we will evaluate the spectrum
 
