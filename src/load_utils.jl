@@ -81,7 +81,7 @@ end
 
 function read_photometry_data(provider, file; unit=Luminosity())
     filters_and_series = Dict{Filter{Float64}, Series{Float64}}()
-    unresolved_tags = String[]
+    unresolved_filters = String[]
     for line in eachline(file)
         startswith(line, '#') && continue
         time_s, val_s, err_s, tag = split(line, r"\s+|\s*,\s*")
@@ -90,7 +90,7 @@ function read_photometry_data(provider, file; unit=Luminosity())
         # resolve filter
         filter = get_filter(provider, String(tag))
         if filter === nothing
-            tag in unresolved_tags || push!(unresolved_tags, tag)
+            tag in unresolved_filters || push!(unresolved_filters, tag)
             continue
         end
         if !(filter in keys(filters_and_series))
@@ -99,6 +99,7 @@ function read_photometry_data(provider, file; unit=Luminosity())
 
         insert_measurement!(filters_and_series[filter], time, val, err)
     end
+    isempty(unresolved_filters) || @warn unresolved_filters
     filters = collect(keys(filters_and_series))
     sers = [to_luminosity(unit, ser) for ser in values(filters_and_series)]
     return PhotometryData{Float64}(filters, sers)

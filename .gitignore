@@ -1,4 +1,5 @@
 data/*/
+results/
 Manifest.toml
 .*/
 *old*

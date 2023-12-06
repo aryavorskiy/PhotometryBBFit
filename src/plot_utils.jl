@@ -28,7 +28,7 @@ end
     size --> (800, 350)
     layout := 2
     xlabel --> "timestamp"
-    legend --> :none
+    label --> ""
     @series begin
         subplot := 1
         ylabel := "radius, cm"

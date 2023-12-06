@@ -26,8 +26,8 @@ function interpolate(ser::Series, time)
     i === nothing && error("timestamp $time out of bounds $(extrema(ser.time))!")
     i == 1 && return ser.val[1], ser.err[1]
     lw = (time - ser.time[i-1]) / (ser.time[i] - ser.time[i-1])
-    return (ser.val[i-1] * lw + ser.val[i] * (1 - lw),
-    √(ser.err[i-1]^2 * lw + ser.err[i]^2 * (1 - lw)),
+    return (ser.val[i-1] * (1 - lw) + ser.val[i] * lw,
+    √(ser.err[i-1]^2 * (1 - lw) + ser.err[i]^2 * lw),
     min(time - ser.time[i-1], ser.time[i] - time))
 end
 

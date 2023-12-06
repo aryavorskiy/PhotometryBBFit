@@ -26,7 +26,10 @@ end
 
 struct BlackBodyModel <: AbstractModel end
 
-start_params(::BlackBodyModel) = (1e10, 5000.0)
+function guess(::BlackBodyModel, pt::SeriesPoint)
+    T = (h * c * 1e8 / kb) / minimum(lambda_eff, pt.filters)
+    (1e10, T)
+end
 constraints(::BlackBodyModel) = (1e7 => 1e70, 1e3 => 1e6)
 spectrum(::BlackBodyModel, params) = PlanckSpectrum(params...)
 
@@ -35,7 +38,7 @@ params(rs::SpectrumWrapper) = params(rs.spectrum)
 params_str(rs::SpectrumWrapper) = params_str(rs.spectrum)
 param_names(rs::SpectrumWrapper) = param_names(rs.spectrum)
 abstract type ModelWrapper <: AbstractModel end
-start_params(rm::ModelWrapper) = start_params(rm.model)
+guess(rm::ModelWrapper, pt::SeriesPoint) = guess(rm.model, pt)
 constraints(rm::ModelWrapper) = constraints(rm.model)
 
 struct RedshiftSpectrum{ST} <: SpectrumWrapper

@@ -75,6 +75,7 @@ filter_flux(spectrum, filter::Filter) =
     sum(broadcasted(*, filter.weights, broadcasted(spectrum, filter.wavelength)))
 
 lambda_eff(filter::Filter) = filter_flux(l -> l^-2, filter) ^ -0.5
+# lambda_eff(filter::Filter) = (filter_flux(l -> l, filter) / filter_flux(l -> l^-1, filter)) ^ -0.5
 
 function interpolate!(filter::Filter{T}, wavelengths) where T
     l = length(wavelengths)
@@ -85,7 +86,7 @@ function interpolate!(filter::Filter{T}, wavelengths) where T
             push!(transmissions, 0)
         else
             lw = (wl - filter.wavelength[i-1]) / (filter.wavelength[i] - filter.wavelength[i-1])
-            tr = filter.transmission[i-1] * lw + filter.transmission[i] * (1 - lw)
+            tr = filter.transmission[i-1] * (1 - lw) + filter.transmission[i] * lw
             push!(transmissions, tr)
         end
     end

@@ -9,7 +9,7 @@ Base.iterate(sp::AbstractSpectrum, i=1) = i > length(sp) ? nothing : (params(sp)
 @inline (spectrum::AbstractSpectrum)(λ) = spectral_density(spectrum, λ)
 
 abstract type AbstractModel end
-start_params(::AbstractModel) = error("not implemented")
+guess(::AbstractModel, ::SeriesPoint) = error("not implemented")
 constraints(::AbstractModel) = error("not implemented")
 function apply_constraints!(params, model::AbstractModel)
     @inbounds @simd for i in eachindex(params)
@@ -17,7 +17,7 @@ function apply_constraints!(params, model::AbstractModel)
         params[i] = params[i] > ma ? ma : params[i] < mi ? mi : params[i]
     end
 end
-nparams(model::AbstractModel) = length(start_params(model))
+nparams(model::AbstractModel) = length(constraints(model))
 
 using LinearAlgebra
 
@@ -54,7 +54,7 @@ residuals(r::LMResult) = filter_flux(r.spectrum, r.pt) - r.pt.vals
 fit_summary(r::LMResult) = fit_summary(r.spectrum, r.pt)
 
 function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, verbose=0)
-    β = collect(start_params(model))
+    β = collect(guess(model, pt))
     newβ = similar(β)
 
     fr = filter_flux(spectrum(model, β), pt)
