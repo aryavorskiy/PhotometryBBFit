@@ -35,15 +35,17 @@ Base.:(==)(f1::Filter, f2::Filter) =
     f1.wavelength == f2.wavelength && f1.transmission == f2.transmission && f1.mode == f2.mode
 Base.hash(f::Filter) =
     Base.hash(f.wavelength, hash(f.transmission, hash(f.mode)))
-function Base.copy(f::Filter)
-    f2 = Filter(f.wavelength, f.transmission, f.mode, f.id, false)
+function Base.copy(f::Filter{T}) where T
+    f2 = Filter{T}(copy(f.wavelength), copy(f.transmission), f.mode, f.id, false)
     copyto!(f2.weights, f.weights)
+    return f2
 end
 
 function Base.show(io::IO, ::MIME"text/plain", filter::Filter)
-    print(io, "Filter `$(filter.id)`")
-    if !get(io, :compact, false)
-        print(""" with `$(filter.mode)`-type detector
+    if get(io, :compact, false)
+        print(io, "`$(filter.id)` @ $(trunc(lambda_eff(filter), digits=2)) AA")
+    else
+        print("""Filter $(filter.id) with `$(filter.mode)`-type detector
         λ_eff = $(trunc(lambda_eff(filter), digits=2)) AA, range $(filter.wavelength[1]) .. $(filter.wavelength[end])""")
     end
 end
@@ -83,13 +85,13 @@ function interpolate!(filter::Filter{T}, wavelengths) where T
             push!(transmissions, 0)
         else
             lw = (wl - filter.wavelength[i-1]) / (filter.wavelength[i] - filter.wavelength[i-1])
-            tr = filter.wavelength[i-1] * lw + filter.wavelength[i] * (1 - lw)
+            tr = filter.transmission[i-1] * lw + filter.transmission[i] * (1 - lw)
             push!(transmissions, tr)
         end
     end
     resize!(filter.transmission, l)
     copyto!(filter.transmission, transmissions)
-    copyto!(filter.wavelength, l)
+    resize!(filter.wavelength, l)
     copyto!(filter.wavelength, wavelengths)
     update_weights!(filter)
 end
@@ -97,8 +99,7 @@ interpolate!(filter::Filter; step) =
     interpolate!(filter, minimum(filter.wavelength):step:maximum(filter.wavelength))
 
 function interpolate(filter::Filter{T}, wavelengths) where T
-    f2 = Filter{T}(filter.wavelength, filter.transmission, filter.mode, filter.id, false)
-    interpolate!(f2, wavelengths)
+    interpolate!(copy(filter), wavelengths)
 end
 interpolate(filter::Filter; step) =
     interpolate(filter, minimum(filter.wavelength):step:maximum(filter.wavelength))

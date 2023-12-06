@@ -130,7 +130,7 @@ function levenberg_marquardt(model, pt::SeriesPoint; tol = 1e-8, maxiter=1000, v
         pt,
         out_spec,
         model,
-        inv(wJ * wJ'),
+        inv(wJ * wJ') * 2,
         new_chi2,
         converged,
         iters)
