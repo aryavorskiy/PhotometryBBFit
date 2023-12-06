@@ -46,10 +46,12 @@ end
 @recipe function f(res::LMResult, ::Val{:heatmap})
     (R, T), covar, χ²dof = res
     model = res.model
-    d = 0.06
-    dT = 400
-    local Rs = (1-d)*R:0.02d * R:(1 + d)R
-    local Ts = T-dT:dT/50:T+dT
+    Re = sqrt(covar[1, 1])
+    Te = sqrt(covar[2, 2])
+    dR = 3Re
+    dT = 3Te
+    local Rs = R - dR:0.02dR:R + dR
+    local Ts = T - dT:0.02dT:T + dT
     data = [chi2dof(spectrum(model, (r, t)), res.pt) for t in Ts, r in Rs]
     @series begin
         seriestype := :heatmap
@@ -59,7 +61,7 @@ end
     end
     @series begin
         seriestype := :contour
-        levels := [chi2dof(spectrum(model, (R * (1 + d * i), T)), res.pt) for i in -1:0.1:1]
+        levels := [chi2dof(spectrum(model, (R + dR * i, T)), res.pt) for i in -1:0.1:1]
         seriescolor := get(plotattributes, :linecolor, :pink)
         (Rs, Ts, data)
     end
@@ -68,22 +70,22 @@ end
         linestyle := :dash
         label := :none
         seriestype := :vline
-        (1 - 0.9d)*R:0.3d * R:(1 + 0.9d)R
+        R-0.9dR:0.3dR:R+0.9dR
     end
     @series begin
         seriescolor := :darkgrey
         linestyle := :dash
         label := :none
         seriestype := :hline
-        T-0.9dT:dT*0.3:T+0.9dT
+        T-0.9dT:0.3dT:T+0.9dT
     end
     @series begin
         seriestype := :scatter
-        xerr := [sqrt(covar[1, 1])]
-        yerr := [sqrt(covar[2, 2])]
+        xerr := [Re]
+        yerr := [Te]
         label := "($(trunc(R, sigdigits=3)), $(round(Int, T))), χ²/dof = $(trunc(χ²dof, sigdigits=5))"
         seriescolor := get(plotattributes, :linecolor, :pink)
-        xlims := ((1-d) * R, (1+d) * R)
+        xlims := (R - dR, R + dR)
         ylims := (T - dT, T + dT)
         [(R, T)]
     end
@@ -122,6 +124,12 @@ end
         xformatter := :plain
         xlims := (lmin, lmax)
         l -> res.spectrum(l)
+    end
+    get(plotattributes, :showscatter, false) && @series begin
+        label := ""
+        markershape := :cross
+        seriestype := :scatter
+        (lambda_eff.(res.pt.filters), filter_flux(res.spectrum, res.pt))
     end
 end
 
