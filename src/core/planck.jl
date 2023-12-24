@@ -27,7 +27,8 @@ end
 struct BlackBodyModel <: AbstractModel end
 
 function guess(::BlackBodyModel, pt::SeriesPoint)
-    T = (h * c * 1e8 / kb) / minimum(lambda_eff, pt.filters)
+    i = findmax(pt.vals)[2]
+    T = (h * c * 1e8 / kb) / lambda_eff(pt.filters[i])
     (1e10, T)
 end
 constraints(::BlackBodyModel) = (1e7 => 1e70, 1e3 => 1e6)
