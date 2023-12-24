@@ -1,7 +1,7 @@
 using RecipesBase
 
 @recipe function f(filter::Filter)
-    label --> filter.id
+    label --> name(filter)
     @series begin
         fill := true
         fillalpha := 0.3
@@ -97,10 +97,10 @@ end
     λeffs = Float64[]
     markers = [:diamond, :ltriangle, :rtriangle, :star5, :star8, :rect]
     marker_i = 0
-    prefix = ""
+    fam = ""
     for (i, filter) in enumerate(res.pt.filters)
-        if prefix != filter.id[1:3]
-            prefix = filter.id[1:3]
+        if fam != filter.meta.family
+            fam = filter.meta.family
             marker_i += 1
         end
         λeff = lambda_eff(filter)
@@ -108,7 +108,7 @@ end
         lmin = min(lmin, minimum(filter.wavelength))
         lmax = max(lmax, maximum(filter.wavelength))
         @series begin
-            label := filter.id
+            label := name(filter)
             yerror := res.pt.errs[i]
             seriestype := :scatter
             markershape := markers[(marker_i - 1) % length(markers) + 1]

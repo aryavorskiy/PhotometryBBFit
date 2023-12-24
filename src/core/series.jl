@@ -57,7 +57,7 @@ function fit_summary(spectrum, pt::SeriesPoint)
     println("χ²/dof = $(chi2dof(spectrum, pt))\n")
     m = filter_flux(spectrum, pt)
     for i in eachindex(pt.filters)
-        println("""$(pt.filters[i].id) (#$i): $(trunc(pt.vals[i] ± pt.errs[i], sigdigits=4))
+        println("""$(name(pt.filters[i])) (#$i): $(trunc(pt.vals[i] ± pt.errs[i], sigdigits=4))
         Modelled $(m[i]), normres $(abs(m[i] - pt.vals[i]) / pt.errs[i])""")
     end
 end
@@ -68,8 +68,8 @@ struct PhotometryData{T} <: AbstractDict{Filter{T}, Series{T}}
     function PhotometryData{T}(filters::Vector{Filter{T}}, sers::Vector{Series{T}}) where T
         @assert length(filters) == length(sers)
         @inline function filter_lt(f1, f2)
-            t1 = f1.id[1:3]
-            t2 = f2.id[1:3]
+            t1 = f1.meta.family
+            t2 = f2.meta.family
             return t1 == t2 ? isless(lambda_eff(f1), lambda_eff(f2)) : isless(t1, t2)
         end
         sp = sortperm(filters, lt=filter_lt)
@@ -81,10 +81,18 @@ function Base.get(sfd::PhotometryData, f::Filter, default)
     i === nothing && return default
     return sfd.sers[i]
 end
-function Base.get(sfd::PhotometryData, id::String, default)
-    i = findfirst(f -> f.id == id, sfd.filters)
-    i === nothing && return default
-    return sfd.sers[i]
+function Base.getindex(sfd::PhotometryData; family, band=:any)
+    inds = findall(sfd.filters) do filter
+        filter.meta.family == lowercase(string(family)) &&
+            (band === :any || string(filter.meta.band) == lowercase(string(band)))
+    end
+    if length(inds) == 0
+        error("No filters from family `$family`, $band band")
+    elseif length(inds) == 1
+        return sfd.sers[only(inds)]
+    else
+        return PhotometryData(sfd.filters[inds], sfd.sers[inds])
+    end
 end
 Base.iterate(sfd::PhotometryData, i = 1) =
     i ≤ length(sfd) ? (sfd.filters[i] => sfd.sers[i], i + 1) : nothing

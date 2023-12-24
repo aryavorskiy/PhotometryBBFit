@@ -13,7 +13,7 @@ include("luminosity_units.jl")
 export Luminosity, Flux
 
 include("load_utils.jl")
-export read_filter, read_photometry_data, SVO2Website, FilterFolder, ConversionRules
+export read_filter, read_photometry_data, FilterFolder, FilterInfo
 
 include("plot_utils.jl")
 
