@@ -73,13 +73,44 @@ end
 
 # Reading data series
 
-function read_photometry_data(provider, file; unit=Luminosity())
+struct LinePattern
+    indices::NTuple{4, Int}
+end
+LinePattern(ints::Vararg{Int, 4}) = LinePattern(Tuple(ints))
+macro pattern_str(str::String)
+    tokens = split(str)
+    vals = Int[]
+    exp_tokens = ("time", "val", "err", "filter")
+    for token in tokens
+        token ∉ exp_tokens && token ∉ ("_", "-") &&
+            error("unexpected token '$token'")
+    end
+    for exp_token in exp_tokens
+        is = findall(==(exp_token), tokens)
+        isempty(is) && error("token '$exp_token' expected")
+        length(is) ≥ 2 && error("token '$exp_token' encountered more than once")
+        push!(vals, only(is))
+    end
+    return :(LinePattern(($(vals...))))
+end
+function get_data(lp::LinePattern, dsplit)
+    all(index in eachindex(dsplit) for index in lp.indices) || return nothing
+    return (
+        parse(Float64, dsplit[lp.indices[1]]),
+        parse(Float64, dsplit[lp.indices[2]]),
+        parse(Float64, dsplit[lp.indices[3]]),
+        dsplit[lp.indices[4]])
+end
+get_data(f::Function, dsplit) = f(dsplit)
+
+function read_photometry_data(pattern, provider, file; unit=Luminosity())
     filters_and_series = Dict{Filter{Float64}, Series{Float64}}()
     unresolved_filters = String[]
     for line in eachline(file)
         startswith(line, '#') && continue
-        time_s, val_s, err_s, tag = split(line, r"\s+|\s*,\s*")
-        time, val, err = parse.(Float64, (time_s, val_s, err_s))
+        res = get_data(pattern, split(line, r"\s+|\s*,\s*"))
+        res === nothing && continue
+        time, val, err, tag = res
 
         # resolve filter
         filter = get_filter(provider, String(tag))
